@@ -1,130 +1,156 @@
-import shared_subroutines
+#from prism import verify
 import numpy as np
 import random
 from itertools import chain
-import linear programming software
 
 class PeUcrlAgent:
 
     def __init__(
         self,
-        # prior knowledge
-        #intracellular_states, # intracellular_states maps states to an array of intracellular states
-        #intracellular_actions, # similar for actions
-        intracellular_mapping,
-        initial_policy,
-        confidence_level: float,
-        reward_function=None,
+        confidence_level: float, # a parameter
+        n_cells: int, # prior knowledge from here and down
+        n_intracellular_states: int,
+        cellular_encoding, # states to N^n
+        n_intracellular_actions: int,
+        cellular_decoding, # N^n to actions # the (size, coding) pair is equivalent to the state/action space
+        reward_function, # todo: make this optional
+        cell_classes: set,
+        cell_labelling_function,
+        regulatory_constraints,
+        initial_policy, # should be in a cellular encoding
     ):
 
+        # check correctness of inputs
         assert 0 < confidence_level < 1
 
-        self.n_cells = len(intracellular_mapping(0))
+        # point inputs to self
+        self.confidence_level = confidence_level
+        self.n_cells = n_cells
+        self.n_intracellular_states = n_intracellular_states
+        self.cellular_encoding = cellular_encoding
+        self.n_intracellular_actions = n_intracellular_actions
+        self.cellular_decoding = cellular_decoding
         self.reward_function = reward_function
+        self.cell_classes = cell_classes
+        self.cell_labelling_function = cell_labelling_function
+        self.regulatory_constraints = regulatory_constraints
+
+        # initialise behaviour policy
         self.behaviour_policy = initial_policy
-        self.intracellular_mapping = intracellular_mapping
+
+        # compute additional parameters
+        self.n_states = n_intracellular_states ** n_cells
+        self.n_actions = n_intracellular_actions ** n_cells
 
         # initialise counts to 0
-        self.labelling_functions = [{'safe', 'unsafe', 'silent'} for _ in range(n_intracellular_states)]
         self.time_step = 0
         self.current_episode_time_step = 0
-        self.current_episode_count = np.zeros((n_states, n_actions))
-        self.previous_episodes_count = np.zeros((n_states, n_actions))
-        self.cellular_current_episode_count = np.zeros((n_states, n_actions))
-        self.cellular_previous_episodes_count = np.zeros((n_states, n_actions))
-        self.transition_sum = np.zeros((n_states, n_actions, n_states))
-        if self.reward_function != None:
-            self.reward_sum = np.zeros(n_states, n_actions)
+        self.current_episode_count = np.zeros((self.n_states, self.n_actions))
+        self.previous_episodes_count = np.zeros((self.n_states, self.n_actions))
+        self.cellular_current_episode_count = np.zeros((self.n_states, self.n_actions))
+        self.cellular_previous_episodes_count = np.zeros((self.n_states, self.n_actions))
+        self.intracellular_episode_count = np.zeros((self.n_intracellular_states, self.n_intracellular_actions))
+        self.transition_sum = np.zeros((self.n_states, self.n_actions, self.n_states))
 
         # initialise statistics
-        self.transition_estimates = np.zeros((n_states, n_actions, n_states))
-        self.intracellular_transition_estimates = np.zeros((n_intracellular_states, n_intracellular_actions, n_intracellular_states))
-        self.transition_errors = np.zeros((n_states, n_actions))
-        self.intracellular_transition_errors = np.zeros((n_intracellular_states, n_intracellular_actions))
-        self.transition_indicators = np.ones((n_states, n_actions))
-        self.intracellular_transition_indicators = np.ones((n_intracellular_states, n_intracellular_actions))
+        self.side_effects_functions = [{'safe', 'unsafe', 'silent'} for _ in range(n_intracellular_states)]
+        self.intracellular_transition_estimates = np.zeros((self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states))
+        self.intracellular_transition_errors = np.zeros((self.n_intracellular_states, self.n_intracellular_actions))
+        self.intracellular_transition_indicators = np.ones((self.n_intracellular_states, self.n_intracellular_actions))
 
+        # miscellaneous initialisations
+        self.previous_state = None
+        self.current_state = None
+        self.action_sampled = False
 
 
     def sample_action(
         self,
-        state,
+        previous_state,
     ):
 
-        action = self.behaviour_policy(state)
-        return action
+        """Sample an action from the behaviour policy and assign current state to previous state"""
+
+        assert previous_state == self.previous_state or previous_state == self.current_state
+        self.action_sampled = True
+
+        # update state, action
+        self.previous_state = self.cellular_encoding(previous_state)
+        self.action = self.behaviour_policy(self.previous_state)
+        
+        # return action
+        return self.cellular_decoding(self.action)
+
 
     def update(
         self,
-        state,
-        action,
-        next_state,
+        current_state,
         reward,
         side_effects=None,
     ):
 
-        self.state = state
-        self.action = action
-        self.next_state = next_state
+        # avoid double updating
+        assert self.action_sampled
+        self.action_sampled = False
+
+        self.current_state = self.cellular_encoding(current_state)
         self.reward = reward
-        self.intracellular_states = self.intracellular_mapping(state=state)
-        self.intracellular_actions = self.intracellular_mapping(action=action)
-        self.next_intracellular_states = self. intracellular_mapping(state=next_state)
+
         if side_effects == None:
             print("Warning: No side effects providing, assuming silence")
             side_effects = np.array([['silent' for _ in range(self.n_cells)] for _ in range(self.n_cells)])
         self.side_effects = side_effects
 
         # on-policy
-        self.current_episode_count[state, action] += 1
-        self._update_cellular_current_episode_count(state, action)
-        self._side_effects_processing(next_state, side_effects)
-        self._action_pruning(state, action, next_state)
+        self.current_episode_count[self.previous_state, self.action] += 1
+        self._update_cellular_current_episode_count()
+        self._side_effects_processing()
+        self._action_pruning()
         self.time_step += 1
 
         # off-policy
         new_episode = (self.current_episode_count >= max(1, self.previous_epsiodes_count))
         if new_episode:
             self._update_confidence_sets()
-            self._extended_value_iteration() # available via pip3?
+            self._extended_value_iteration()
             self._pe_shield()
             self.episode += 1
             self.current_episode_time_step = self.time_step
             self.previous_episodes_count += self.current_episode_count
             self.cellular_previous_episodes_count += self.cellular_current_episode_count
 
-    # subroutines (not shared)
+    # subroutines
 
     def _update_cellular_current_episode_count(self):
 
-        for intracellular_state in self.intracellular_states:
-            for intracellular_action in self.intracellular_actions:
+        for intracellular_state in self.previous_state:
+            for intracellular_action in self.action:
                 self.intracellular_episode_count[intracellular_state, intracellular_action] += 1
-        self.cellular_current_episode_count[self.state, self.action] = np.amin(
+        self.cellular_current_episode_count[self.previous_state, self.action] = np.amin(
             [
                 [
-                    self.intracellular_episode_count[intracellular_state, intracellular_action] for intracellular_state in self.intracellular_states
-                ] for intracellular_action in self.intracellular_actions
+                    self.intracellular_episode_count[intracellular_state, intracellular_action] for intracellular_state in self.previous_state
+                ] for intracellular_action in self.action
             ]
         )
+        
 
     def _side_effects_processing(self):
 
         for reporting_cell in range(self.n_cells):
             for reported_cell in range(self.n_cells):
                 if self.side_effects[reporting_cell, reported_cell] == 'safe':
-                    self.labelling_functions[self.intracellular_states[reported_cell]] -= {'unsafe'}
+                    self.side_effects_functions[self.current_state[reported_cell]] -= {'unsafe'}
                 elif self.side_effects[reporting_cell, reported_cell] == 'unsafe':
-                    self.labelling_functions[self.intracellular_states[reported_cell]] -= {'safe'}
-
+                    self.side_effects_functions[self.current_state[reported_cell]] -= {'safe'}
 
 
     def _action_pruning(self):
 
         # basic case
         for cell in range(self.n_cells):
-            if 'unsafe' in self.labelling_functions[self.next_intracellular_states[cell]]:
-                self.intracellular_transition_indicators[self.intracellular_states[cell], self.intracellular_actions[cell]] = 0
+            if 'unsafe' in self.side_effects_functions[self.current_state[cell]]:
+                self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]] = 0
         
         # corner cases
         if self.time_step == 0:
@@ -135,7 +161,7 @@ class PeUcrlAgent:
                 self.path[cell] = set()
             elif pruned_action_space == 1:
                 self.path[cell].add([self.intracellular_states[cell], self.intracellular_actions[cell]])
-            if ('unsafe' in self.labelling_functions[self.next_intracellular_states[cell]]) or pruned_action_space == 0:
+            if ('unsafe' in self.side_effects_functions[self.next_intracellular_states[cell]]) or pruned_action_space == 0:
                 for [intracellular_state, intracellular_action] in self.path[cell]:
                     self.intracellular_transition_indicator[intracellular_state, intracellular_action] = 0
 
@@ -254,9 +280,9 @@ class AntiSilencingPeUcrlAgent(PeUcrlAgent):
         for reporting_cell in range(self.n_cells): # the same
             for reported_cell in range(self.n_cells):
                 if self.side_effects[reporting_cell, reported_cell] == 'safe':
-                    self.labelling_functions[self.intracellular_states[reported_cell]] -= {'unsafe'}
+                    self.side_effects_functions[self.intracellular_states[reported_cell]] -= {'unsafe'}
                 elif self.side_effects[reporting_cell, reported_cell] == 'unsafe':
-                    self.labelling_functions[self.intracellular_states[reported_cell]] -= {'safe'}
+                    self.side_effects_functions[self.intracellular_states[reported_cell]] -= {'safe'}
                 else: # change
                     self.silence[reporting_cell] += 1
 
