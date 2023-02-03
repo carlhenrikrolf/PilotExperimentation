@@ -3,6 +3,8 @@ import numpy as np
 import random
 from itertools import chain
 
+
+
 class PeUcrlAgent:
 
     def __init__(
@@ -18,7 +20,7 @@ class PeUcrlAgent:
         cell_classes: set,
         cell_labelling_function,
         regulatory_constraints,
-        initial_policy, # should be in a cellular encoding
+        initial_policy: np.ndarray # should be in a cellular encoding
     ):
 
         # check correctness of inputs
@@ -83,9 +85,8 @@ class PeUcrlAgent:
 
         # update state, action
         self.previous_state = self.cellular_encoding(previous_state)
-        flat_state = self._flatten(self.previous_state)
-        flat_action = self.behaviour_policy[flat_state]
-        self.action = self._unflatten(flat_action=flat_action)
+        flat_state = self._flatten(state=self.previous_state)
+        self.action = self.behaviour_policy[:, flat_state]
         
         # return action
         return self.cellular_decoding(self.action)
@@ -97,6 +98,8 @@ class PeUcrlAgent:
         reward,
         side_effects=None,
     ):
+
+        """Update the agent's policy and statistics"""
 
         assert self.action_sampled # avoid double updating
         self.action_sampled = False
@@ -235,7 +238,7 @@ class PeUcrlAgent:
             start_bit = bit_length - len(bin_string)
             for bit in range(start_bit, bit_length):
                 bin_array[cell, bit] = int(bin_string[bit - start_bit])
-        bin_list = np.ravel(bin_array)
+        bin_list = np.reshape(bin_array, np.prod(np.shape(bin_array)))#np.ravel(bin_array)
         integer = np.dot(np.flip(bin_list), 2 ** np.arange(bin_list.size))
         return integer
 
@@ -246,7 +249,27 @@ class PeUcrlAgent:
         flat_action=None,
     ):
 
-        pass
+        assert flat_state == None ^ flat_action == None
+        if type(flat_state) is int:
+            n = self.n_intracellular_states
+            obj = flat_state
+        elif type(flat_action) is int:
+            n = self.n_intracellular_actions
+            obj = flat_action
+        else:
+            raise ValueError('flat_state or flat_action must be an integer')
+
+        binary = bin(obj)[2:]
+        bit_length = (n * self.n_cells - 1).bit_length()
+        bin_list = np.zeros(bit_length)
+        start_bit = bit_length - len(binary)
+        for bit in range(start_bit, bit_length):
+            bin_list[bit] = int(binary[bit - start_bit])
+        bin_array = np.reshape(bin_list, (self.n_cells, int(bit_length / self.n_cells)))
+        int_list = np.zeros(self.n_cells)
+        for cell in range(self.n_cells):
+            int_list[cell] = np.dot(np.flip(bin_array[cell]), 2 ** np.arange(bin_array[cell].size))
+        return int_list
 
 
     def _inner_max(
@@ -290,7 +313,9 @@ class PeUcrlAgent:
         while not stop:
             for flat_state in range(self.n_states):
                 current_value[flat_state] = max([self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value) for flat_action in range(self.n_actions)])
-                self.target_policy[flat_state] = np.argmax([self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value) for flat_action in range(self.n_actions)])
+                self.target_policy[:, flat_state] = self._unflatten(
+                    flat_action=np.argmax([self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value) for flat_action in range(self.n_actions)])
+                )
             max_diff = max([current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)])
             min_diff = min([current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)])
             stop = (max_diff - min_diff < self.accuracy)
@@ -303,10 +328,10 @@ class PeUcrlAgent:
         while len(cell_set) >= 1:
             cell = self._cell_prioritisation(cell_set)
             cell_set -= set(cell)
-            tmp_policy[cell] = self.target_policy[cell]
+            tmp_policy[cell, :] = self.target_policy[cell, :]
             verified = self._verify(tmp_policy)
             if not verified:
-                tmp_policy[cell] = self.behaviour_policy[cell]
+                tmp_policy[cell, :] = self.behaviour_policy[cell, :]
         self.behaviour_policy = tmp_policy
 
     def _cell_prioritisation(
@@ -326,42 +351,6 @@ class PeUcrlAgent:
 
         return True
 
-class AntiSilencingPeUcrlAgent(PeUcrlAgent):
-
-    pass
-
-    silence = np.array(self.n_cells)
-
-    def _side_effects_processing(
-        self,
-        next_state,
-        side_effects,
-    ):
-
-        if self.time_step == 0: # change
-            self.silence = np.zeros(self.n_cells)
-        for reporting_cell in range(self.n_cells): # the same
-            for reported_cell in range(self.n_cells):
-                if self.side_effects[reporting_cell, reported_cell] == 'safe':
-                    self.side_effects_functions[self.intracellular_states[reported_cell]] -= {'unsafe'}
-                elif self.side_effects[reporting_cell, reported_cell] == 'unsafe':
-                    self.side_effects_functions[self.intracellular_states[reported_cell]] -= {'safe'}
-                else: # change
-                    self.silence[reporting_cell] += 1
 
 
-    def _cell_prioritisation(
-        self,
-        cell_set: set,
-    ):
-
-        if len(cell_set) == self.n_cells:
-            self.last_cell = np.where(self.silence == self.silence.min())
-            if len(self.last_cell) >= 2:
-                self.last_cell = random.sample(self.last_cell, 1)
-        if len(cell_set) >= 2:
-            cell = random.sample(cell_set - self.last_cell)
-        else:
-            cell = self.last_cell
-        return cell
 
