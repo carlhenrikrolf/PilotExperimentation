@@ -35,7 +35,7 @@ class PeUcrlAgent:
         self.cellular_encoding = cellular_encoding
         self.n_intracellular_actions = n_intracellular_actions
         self.cellular_decoding = cellular_decoding
-        self.reward_function = lambda flat_state, flat_action: reward_function(self._unflatten(flat_state=flat_state), self._unflatten(flat_action=flat_action))
+        #self.reward_function = lambda flat_state, flat_action: reward_function(self._unflatten(flat_state=flat_state), self._unflatten(flat_action=flat_action))
         self.cell_classes = cell_classes
         self.cell_labelling_function = cell_labelling_function
         self.regulatory_constraints = regulatory_constraints
@@ -43,6 +43,11 @@ class PeUcrlAgent:
         # compute additional parameters
         self.n_states = n_intracellular_states ** n_cells
         self.n_actions = n_intracellular_actions ** n_cells
+
+        self.reward_function = np.zeros((self.n_states, self.n_actions))
+        for flat_state in range(self.n_states):
+            for flat_action in range(self.n_actions):
+                self.reward_function[flat_state,flat_action] = reward_function(self._unflatten(flat_state=flat_state), self._unflatten(flat_action=flat_action))
 
         # initialise behaviour policy
         self.behaviour_policy = initial_policy # using some kind of conversion?
@@ -80,7 +85,7 @@ class PeUcrlAgent:
 
         """Sample an action from the behaviour policy and assign current state to previous state"""
 
-        assert previous_state == self.previous_state or previous_state == self.current_state
+        # assert that we put in the right state
         self.action_sampled = True
 
         # update state, action
@@ -118,8 +123,9 @@ class PeUcrlAgent:
         self.time_step += 1
 
         # off-policy
-        new_episode = (self.current_episode_count >= max(1, self.previous_episodes_count))
-        if new_episode:
+        next_action = self.behaviour_policy[:, self._flatten(state=self.current_state)]
+        new_episode = (self.current_episode_count[self._flatten(state=self.current_state), self._flatten(action=next_action)] >= max(1, self.previous_episodes_count[self._flatten(self.current_state), self._flatten(next_action)]))
+        if True: #new_episode:
             self._update_confidence_sets()
             self._extended_value_iteration()
             self._pe_shield()
@@ -221,7 +227,7 @@ class PeUcrlAgent:
         action=None,
     ):
 
-        assert state == None ^ action == None
+        assert (state is None) ^ (action is None)
         if type(state) is np.ndarray:
             n = self.n_intracellular_states
             obj = state
@@ -239,7 +245,7 @@ class PeUcrlAgent:
             for bit in range(start_bit, bit_length):
                 bin_array[cell, bit] = int(bin_string[bit - start_bit])
         bin_list = np.reshape(bin_array, np.prod(np.shape(bin_array)))#np.ravel(bin_array)
-        integer = np.dot(np.flip(bin_list), 2 ** np.arange(bin_list.size))
+        integer = int(np.dot(np.flip(bin_list), 2 ** np.arange(bin_list.size)))
         return integer
 
     
@@ -249,7 +255,7 @@ class PeUcrlAgent:
         flat_action=None,
     ):
 
-        assert flat_state == None ^ flat_action == None
+        assert (flat_state is None) ^ (flat_action is None)
         if type(flat_state) is int:
             n = self.n_intracellular_states
             obj = flat_state
