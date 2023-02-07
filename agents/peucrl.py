@@ -51,18 +51,18 @@ class PeUcrlAgent:
 
         # initialise behaviour policy
         self.behaviour_policy = initial_policy # using some kind of conversion?
-        self.target_policy = np.zeros(self.n_states)
+        self.target_policy = np.zeros((self.n_cells, self.n_states), dtype=int)
 
         # initialise counts to 0
         self.time_step = 0
-        self.current_episode_time_step = 0 # do I need this?
-        self.current_episode_count = np.zeros((self.n_states, self.n_actions))
-        self.previous_episodes_count = np.zeros((self.n_states, self.n_actions))
-        self.cellular_current_episode_count = np.zeros((self.n_states, self.n_actions))
-        self.cellular_previous_episodes_count = np.zeros((self.n_states, self.n_actions))
-        self.intracellular_episode_count = np.zeros((self.n_intracellular_states, self.n_intracellular_actions))
-        self.intracellular_sum = np.zeros((self.n_intracellular_states, self.n_intracellular_actions))
-        self.intracellular_transition_sum = np.zeros((self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states))
+        #self.current_episode_time_step = 0 # do I need this?
+        self.current_episode_count = np.zeros((self.n_states, self.n_actions), dtype=int)
+        self.previous_episodes_count = np.zeros((self.n_states, self.n_actions), dtype=int)
+        self.cellular_current_episode_count = np.zeros((self.n_states, self.n_actions), dtype=int)
+        self.cellular_previous_episodes_count = np.zeros((self.n_states, self.n_actions), dtype=int)
+        self.intracellular_episode_count = np.zeros((self.n_intracellular_states, self.n_intracellular_actions), dtype=int)
+        self.intracellular_sum = np.zeros((self.n_intracellular_states, self.n_intracellular_actions), dtype=int)
+        self.intracellular_transition_sum = np.zeros((self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states), dtype=int)
 
         # initialise statistics
         self.side_effects_functions = [{'safe', 'unsafe', 'silent'} for _ in range(n_intracellular_states)]
@@ -90,8 +90,8 @@ class PeUcrlAgent:
 
         # update state, action
         self.previous_state = self.cellular_encoding(previous_state)
-        flat_state = self._flatten(state=self.previous_state)
-        self.action = self.behaviour_policy[:, flat_state]
+        self.flat_previous_state = self._flatten(state=self.previous_state)
+        self.action = self.behaviour_policy[:, self.flat_previous_state]
         
         # return action
         return self.cellular_decoding(self.action)
@@ -109,14 +109,15 @@ class PeUcrlAgent:
         assert self.action_sampled # avoid double updating
         self.action_sampled = False
         self.current_state = self.cellular_encoding(current_state)
+        self.flat_action = self._flatten(state=self.action)
+        self.flat_current_state = self._flatten(state=self.current_state)
         self.reward = reward
-        if side_effects == None:
+        if side_effects is None:
             print("Warning: No side effects providing, assuming silence")
             side_effects = np.array([['silent' for _ in range(self.n_cells)] for _ in range(self.n_cells)])
         self.side_effects = side_effects
 
         # on-policy
-        self.current_episode_count[self.previous_state, self.action] += 1
         self._side_effects_processing()
         self._action_pruning()
         self._update_current_episode_counts() # moved below. Correct?
@@ -125,11 +126,11 @@ class PeUcrlAgent:
         # off-policy
         next_action = self.behaviour_policy[:, self._flatten(state=self.current_state)]
         new_episode = (self.current_episode_count[self._flatten(state=self.current_state), self._flatten(action=next_action)] >= max(1, self.previous_episodes_count[self._flatten(self.current_state), self._flatten(next_action)]))
-        if True: #new_episode:
+        if new_episode:
             self._update_confidence_sets()
             self._extended_value_iteration()
             self._pe_shield()
-            self.current_episode_time_step = self.time_step # is this right? If not, could I just use the time step?
+            #self.current_episode_time_step = self.time_step # is this right? If not, could I just use the time step?
             self.previous_episodes_count += self.current_episode_count
             self.cellular_previous_episodes_count += self.cellular_current_episode_count
 
@@ -138,23 +139,22 @@ class PeUcrlAgent:
     def _update_current_episode_counts(self):
 
         # intracellular
-        for intracellular_state in self.previous_state:
-            for intracellular_action in self.action:
-                self.intracellular_episode_count[intracellular_state, intracellular_action] += 1
+        for (intracellular_state, intracellular_action) in zip(self.previous_state, self.action):
+            self.intracellular_episode_count[intracellular_state, intracellular_action] += 1
 
         # cellular
-        flat_previous_state = self._flatten(state=self.previous_state)
-        flat_action = self._flatten(action=self.action)
-        self.cellular_current_episode_count[flat_previous_state, flat_action] = np.amin(
-            [
-                [
-                    self.intracellular_episode_count[intracellular_state, intracellular_action] for intracellular_state in self.previous_state
-                ] for intracellular_action in self.action
-            ]
-        )
+        for flat_previous_state in range(self.n_states):
+            for flat_action in range(self.n_actions):
+                self.cellular_current_episode_count[flat_previous_state, flat_action] = np.amin(
+                    [
+                        [
+                            self.intracellular_episode_count[intracellular_state, intracellular_action] for intracellular_state in self._unflatten(flat_state=flat_previous_state)
+                        ] for intracellular_action in self._unflatten(flat_action=flat_action)
+                    ]
+                )
 
         # standard
-        self.current_episode_count[flat_previous_state, flat_action] += 1
+        self.current_episode_count[self.flat_previous_state, self.flat_action] += 1
         
 
     def _side_effects_processing(self):
@@ -215,9 +215,9 @@ class PeUcrlAgent:
         # update errors
         self.transition_errors[flat_previous_state, flat_action] = np.sqrt(
             (
-                14 * self.n_states * np.log(2 * self.n_actions * self.current_episode_time_step)
+                14 * self.n_states * np.log(2 * self.n_actions * self.time_step)
             ) / (
-                max({1, self.cellular_previous_episodes_count[flat_previous_state, flat_action]})
+                max([1, self.cellular_previous_episodes_count[flat_previous_state, flat_action]])
             )
         )
 
@@ -272,7 +272,7 @@ class PeUcrlAgent:
         for bit in range(start_bit, bit_length):
             bin_list[bit] = int(binary[bit - start_bit])
         bin_array = np.reshape(bin_list, (self.n_cells, int(bit_length / self.n_cells)))
-        int_list = np.zeros(self.n_cells)
+        int_list = np.zeros(self.n_cells, dtype=int)
         for cell in range(self.n_cells):
             int_list[cell] = np.dot(np.flip(bin_array[cell]), 2 ** np.arange(bin_array[cell].size))
         return int_list
@@ -280,21 +280,22 @@ class PeUcrlAgent:
 
     def _inner_max(
         self,
-        state,
-        action,
+        flat_state,
+        flat_action,
         value,
     ):
 
-        flat_state = self._flatten(state=state)
-        flat_action = self._flatten(action=action)
+        #flat_state = self._flatten(state=state)
+        #flat_action = self._flatten(action=action)
         sorted_states = np.argsort(value)
         max_p = np.zeros(self.n_states)
         for flat_next_state in range(self.n_states):
             max_p[flat_next_state] = self.transition_estimates[flat_state,flat_action,flat_next_state]
+        #x = self.transition_estimates[flat_state,flat_action,sorted_states[-1]] + self.transition_errors[flat_state, flat_action]
         max_p[sorted_states[-1]] = min(
             [
                 1,
-                self.transition_estimates[flat_state,flat_action] + self.transition_errors[flat_state, flat_action]
+                self.transition_estimates[flat_state,flat_action,sorted_states[-1]] + self.transition_errors[flat_state, flat_action]
             ]
         )
         l = -2
@@ -306,8 +307,6 @@ class PeUcrlAgent:
                 ]
             )
             l -= 1
-            if l < -self.n_states:
-                raise ValueError('sum of max_p is greater than 1')
         return sum([ v * p for (v, p) in zip(value, max_p)])   
 
 
@@ -318,10 +317,11 @@ class PeUcrlAgent:
         stop = False
         while not stop:
             for flat_state in range(self.n_states):
-                current_value[flat_state] = max([self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value) for flat_action in range(self.n_actions)])
-                self.target_policy[:, flat_state] = self._unflatten(
-                    flat_action=np.argmax([self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value) for flat_action in range(self.n_actions)])
-                )
+                values = [(self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value)) for flat_action in range(self.n_actions)]
+                current_value[flat_state] = max(values)
+                max_flat_action = int(np.argmax(values))
+                max_action = self._unflatten(flat_action=max_flat_action)
+                self.target_policy[:, flat_state] = max_action
             max_diff = max([current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)])
             min_diff = min([current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)])
             stop = (max_diff - min_diff < self.accuracy)

@@ -37,8 +37,17 @@ state = np.zeros(n_cells, dtype=int)
 print("state: ", state)
 action = agt.sample_action(state)
 print("action: ", action)
-current_state = np.ones(n_cells, dtype=int)
+current_state = np.zeros(n_cells, dtype=int)
 print("next_state: ", current_state)
 reward = reward_function(state, action)
 print("reward: ", reward)
-agt.update(current_state=current_state, reward=reward)
+side_effects = np.array(
+    [
+        ['safe', 'silent'],
+        ['silent', 'unsafe'],
+    ]
+)
+print("side_effects: \n", side_effects)
+
+agt.update(current_state, reward, side_effects=side_effects)
+
