@@ -115,3 +115,18 @@ class Test_PeUcrl:
 
     def test_initial_update_new_episode(self):
         pass
+
+
+
+def polarisation_instantiation():
+    pass
+
+
+class Test_PeUcrl_in_PolarisationEnv:
+    
+    def test_instantiation(self):
+        pass
+
+
+    def test_rewards(self):
+        pass

@@ -2,6 +2,7 @@
 import numpy as np
 import random
 from itertools import chain
+from time import perf_counter_ns
 
 
 
@@ -107,6 +108,9 @@ class PeUcrlAgent:
         """Update the agent's policy and statistics"""
 
         assert self.action_sampled # avoid double updating
+
+        self.start_time_step = perf_counter_ns()
+
         self.action_sampled = False
         self.current_state = self.cellular_encoding(current_state)
         self.flat_action = self._flatten(state=self.action)
@@ -126,7 +130,15 @@ class PeUcrlAgent:
         # off-policy
         next_action = self.behaviour_policy[:, self._flatten(state=self.current_state)]
         new_episode = (self.current_episode_count[self._flatten(state=self.current_state), self._flatten(action=next_action)] >= max(1, self.previous_episodes_count[self._flatten(self.current_state), self._flatten(next_action)]))
+        
+        self.end_time_step = perf_counter_ns()
+        self.start_episode = np.nan
+        self.end_episode = np.nan
+        
         if new_episode:
+
+            self.start_episode = perf_counter_ns()
+
             self._update_confidence_sets()
             self._extended_value_iteration()
             self._pe_shield()
@@ -134,7 +146,15 @@ class PeUcrlAgent:
             self.previous_episodes_count += self.current_episode_count
             self.cellular_previous_episodes_count += self.cellular_current_episode_count
 
+            self.end_episode = perf_counter_ns()
+
     # subroutines
+
+    def get_ns_between_time_steps(self):
+        return self.end_time_step - self.start_time_step
+    
+    def get_ns_between_episodes(self):
+        return self.end_episode - self.start_episode
 
     def _update_current_episode_counts(self):
 
@@ -266,7 +286,7 @@ class PeUcrlAgent:
             raise ValueError('flat_state or flat_action must be an integer')
 
         binary = bin(obj)[2:]
-        bit_length = (n * self.n_cells - 1).bit_length()
+        bit_length = (n**self.n_cells - 1).bit_length()
         bin_list = np.zeros(bit_length)
         start_bit = bit_length - len(binary)
         for bit in range(start_bit, bit_length):
