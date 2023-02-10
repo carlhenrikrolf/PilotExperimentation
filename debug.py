@@ -1,68 +1,58 @@
+# import packages
 from agents import PeUcrlAgent
-import numpy as np
+from json import load
 import gymnasium as gym
+from os import system
+system("cd ..; pip3 install -e gym-cellular")
 import gym_cellular
-from copy import deepcopy
+import numpy as np
+from pprint import pprint
 
+# import configurations
+config_file = open("config_files/peucrl_polarisation_1.json", 'r')
+config = load(config_file)
 
-
-confidence_level = 0.95
-accuracy = 0.90
-n_cells = 2
-cell_classes = None
-cell_labelling_function = None
-regulatory_constraints = None
-
-n_user_states = 2
-n_moderators=1
-n_recommendations=2
-
+# instantiate environment
 env = gym.make(
-    'gym_cellular/Polarisation-v1',
-    n_users=n_cells,
-    n_user_states=n_user_states,
-    n_moderators=n_moderators,
+    config["environment_version"],
+    n_users=config["n_users"],
+    n_user_states=config["n_user_states"],
+    n_recommendations=config["n_recommendations"],
+    n_moderators=config["n_moderators"],
+    seed=config["environment_seed"],
 )
 
-def reward_function(state, action):
+def reward_function(x,y):
     return 0
 
-cellular_encoding = env.cellular_encoding
-cellular_decoding = env.cellular_decoding
-
-n_intracellular_states = n_user_states * 2
-n_intracellular_actions = n_recommendations
-initial_policy = np.zeros((n_cells, n_intracellular_states**n_cells), dtype=int) # flat states
-
-
+# instantiate agent
 agt = PeUcrlAgent(
-    confidence_level=confidence_level,
-    accuracy=accuracy,
-    n_cells=n_cells,
-    n_intracellular_states=n_intracellular_states,
-    cellular_encoding=cellular_encoding,
-    n_intracellular_actions=n_intracellular_actions,
-    cellular_decoding=cellular_decoding,
+    confidence_level=config["confidence_level"],
+    accuracy=config["accuracy"],
+    n_cells=config["n_users"],
+    n_intracellular_states=config["n_user_states"] * 2,
+    cellular_encoding=env.cellular_encoding,
+    n_intracellular_actions=config["n_recommendations"],
+    cellular_decoding=env.cellular_decoding,
     reward_function=reward_function,
-    cell_classes=cell_classes,
-    cell_labelling_function=cell_labelling_function,
-    regulatory_constraints=regulatory_constraints,
-    initial_policy=initial_policy,
+    cell_classes=config["cell_classes"],
+    cell_labelling_function=config["cell_labelling_function"],
+    regulatory_constraints=config["regulatory_constraints"],
+    initial_policy=env.get_initial_policy(),
 )
 
-state, info = env.reset(seed=40)
-state = deepcopy(state)
-print("state: ", state)
-action = agt.sample_action(state)
-print("action: ", action)
+print("\n Config:")
+pprint(config)
+
+################################################################
+
+previous_state, info = env.reset(seed=config["reset_seed"])
+print("\n State:")
+pprint(previous_state)
+print("Info:")
+pprint(info)
+
+action = agt.sample_action(previous_state)
 current_state, reward, terminated, truncated, info = env.step(action)
-#current_state = np.zeros(n_cells, dtype=int)
-print("st state: ", state)
-print("next_state: ", current_state)
-#reward = reward_function(state, action)
-print("reward: ", reward, env.reward_function(state,action))
-side_effects = info['side_effects']
-print("side_effects: \n", side_effects)
-
-agt.update(current_state, reward, side_effects=side_effects)
-
+print("\n Action:")
+pprint(action)

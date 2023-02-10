@@ -3,6 +3,7 @@ import numpy as np
 import random
 from itertools import chain
 from time import perf_counter_ns
+import math
 
 
 
@@ -17,11 +18,11 @@ class PeUcrlAgent:
         cellular_encoding, # states to N^n
         n_intracellular_actions: int,
         cellular_decoding, # N^n to actions # the (size, coding) pair is equivalent to the state/action space
-        reward_function, # todo: make this optional
         cell_classes: set,
         cell_labelling_function,
         regulatory_constraints,
-        initial_policy: np.ndarray # should be in a cellular encoding
+        initial_policy: np.ndarray, # should be in a cellular encoding
+        reward_function=None, # todo: make this optional
     ):
 
         # check correctness of inputs
@@ -257,7 +258,7 @@ class PeUcrlAgent:
         else:
             raise ValueError('state or action must be an array')
 
-        bit_length = (n - 1).bit_length()
+        bit_length = math.ceil(np.log2(n)) #(n - 1).bit_length()
         bin_array = np.zeros((self.n_cells, bit_length))
         for cell in range(self.n_cells):
             bin_string = bin(obj[cell])[2:]
@@ -286,7 +287,7 @@ class PeUcrlAgent:
             raise ValueError('flat_state or flat_action must be an integer')
 
         binary = bin(obj)[2:]
-        bit_length = (n**self.n_cells - 1).bit_length()
+        bit_length = self.n_cells * math.ceil(np.log2(n))#(n**self.n_cells - 1).bit_length()
         bin_list = np.zeros(bit_length)
         start_bit = bit_length - len(binary)
         for bit in range(start_bit, bit_length):

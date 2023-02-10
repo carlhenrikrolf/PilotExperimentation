@@ -58,13 +58,22 @@ class Test_PeUcrl:
     def test_flatten_is_invertible(self):
 
         agt = minimal_instantiation()
+        
         x = np.zeros(agt.n_cells, dtype=int)
         y = agt._unflatten(flat_state=agt._flatten(state=x))
         assert (x == y).all()
 
-        a = np.ones(agt.n_cells, dtype=int)
-        b = agt._unflatten(flat_action=agt._flatten(action=a))
-        assert (a == b).all()
+        x[0] = 1
+        y = agt._unflatten(flat_action=agt._flatten(action=x))
+        assert (x == y).all()
+
+        x = np.ones(agt.n_cells, dtype=int)
+        y = agt._unflatten(flat_action=agt._flatten(action=x))
+        assert (x == y).all()
+
+        x[0] = 0
+        y = agt._unflatten(flat_action=agt._flatten(action=x))
+        assert (x == y).all()
 
     
     def test_initial_update_no_new_episode(self):

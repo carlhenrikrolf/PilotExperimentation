@@ -9,6 +9,7 @@ See notebook to reproduce analysis.
 Python packages:
 - numpy
 - pandas
+- matplotlib
 - random
 - itertools
 - gymnasium
