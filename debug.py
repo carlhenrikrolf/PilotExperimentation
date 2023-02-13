@@ -52,7 +52,12 @@ pprint(previous_state)
 print("Info:")
 pprint(info)
 
-action = agt.sample_action(previous_state)
-current_state, reward, terminated, truncated, info = env.step(action)
-print("\n Action:")
-pprint(action)
+print(agt.n_intracellular_states, agt.n_states)
+print(
+    agt._flatten(state=np.array([9,9,9])),
+    agt._flatten(state=np.array([0,0,0]))
+)
+#action = agt.sample_action(previous_state)
+#current_state, reward, terminated, truncated, info = env.step(action)
+#print("\n Action:")
+#pprint(action)

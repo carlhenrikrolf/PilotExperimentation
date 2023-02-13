@@ -4,6 +4,7 @@ import random
 from itertools import chain
 from time import perf_counter_ns
 import math
+from agents.utils.space_transformations import cellular2tabular, tabular2cellular
 
 
 
@@ -250,6 +251,42 @@ class PeUcrlAgent:
 
         assert (state is None) ^ (action is None)
         if type(state) is np.ndarray:
+            m = self.n_intracellular_states
+            obj = state
+        elif type(action) is np.ndarray:
+            m = self.n_intracellular_actions
+            obj = action
+        else:
+            raise ValueError('state or action must be an array')
+
+        return cellular2tabular(obj, m, self.n_cells)
+        
+    def _unflatten(
+        self,
+        flat_state=None,
+        flat_action=None,
+    ):
+
+        assert (flat_state is None) ^ (flat_action is None)
+        if type(flat_state) is int:
+            m = self.n_intracellular_states
+            obj = flat_state
+        elif type(flat_action) is int:
+            m = self.n_intracellular_actions
+            obj = flat_action
+        else:
+            raise ValueError('flat_state or flat_action must be an integer')
+
+        return tabular2cellular(obj, m, self.n_cells)
+    
+    def _old_flatten(
+        self,
+        state=None,
+        action=None,
+    ):
+
+        assert (state is None) ^ (action is None)
+        if type(state) is np.ndarray:
             n = self.n_intracellular_states
             obj = state
         elif type(action) is np.ndarray:
@@ -270,7 +307,7 @@ class PeUcrlAgent:
         return integer
 
     
-    def _unflatten(
+    def _old_unflatten(
         self,
         flat_state=None,
         flat_action=None,
