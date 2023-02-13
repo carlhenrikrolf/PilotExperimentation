@@ -1,0 +1,15 @@
+{
+    "environment_version": "gym_cellular/Polarisation-v2",
+    "environment_seed": 0,
+    "n_users": 2,
+    "n_user_states": 2,
+    "n_recommendations": 2,
+    "n_moderators": 2,
+    "confidence_level": 0.95,
+    "accuracy": 0.90,
+    "cell_classes": null,
+    "cell_labelling_function": null,
+    "regulatory_constraints": null,
+    "max_time_steps": 1000,
+    "reset_seed": 0
+}

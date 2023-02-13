@@ -22,8 +22,8 @@ env = gym.make(
     seed=config["environment_seed"],
 )
 
-def reward_function(x,y):
-    return 0
+#def reward_function(x,y):
+#    return 0
 
 # instantiate agent
 agt = PeUcrlAgent(
@@ -34,7 +34,7 @@ agt = PeUcrlAgent(
     cellular_encoding=env.cellular_encoding,
     n_intracellular_actions=config["n_recommendations"],
     cellular_decoding=env.cellular_decoding,
-    reward_function=reward_function,
+    reward_function=env.tabular_reward_function,
     cell_classes=config["cell_classes"],
     cell_labelling_function=config["cell_labelling_function"],
     regulatory_constraints=config["regulatory_constraints"],

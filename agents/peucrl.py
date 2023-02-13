@@ -50,7 +50,7 @@ class PeUcrlAgent:
         self.reward_function = np.zeros((self.n_states, self.n_actions))
         for flat_state in range(self.n_states):
             for flat_action in range(self.n_actions):
-                self.reward_function[flat_state,flat_action] = reward_function(self._unflatten(flat_state=flat_state), self._unflatten(flat_action=flat_action))
+                self.reward_function[flat_state,flat_action] = reward_function(flat_state,flat_action)
 
         # initialise behaviour policy
         self.behaviour_policy = initial_policy # using some kind of conversion?
