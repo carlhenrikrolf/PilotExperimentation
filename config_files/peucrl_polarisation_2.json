@@ -1,4 +1,5 @@
 {
+    "constraints_file_path": "constraints/clinical_trial_0.props",
     "environment_version": "gym_cellular/Polarisation-v2",
     "environment_seed": 0,
     "n_users": 2,

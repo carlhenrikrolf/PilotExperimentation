@@ -1,0 +1,4 @@
+label "phi0" = P>=0.99 [ G n_nonconsenting <= 0]
+label "phi1" = P>=0.2 [ G n <= 1]
+
+multi("phi0", "phi1")

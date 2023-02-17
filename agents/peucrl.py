@@ -5,6 +5,7 @@ from itertools import chain
 from time import perf_counter_ns
 import math
 from agents.utils.space_transformations import cellular2tabular, tabular2cellular
+from os import system
 
 
 
@@ -22,6 +23,7 @@ class PeUcrlAgent:
         cell_classes: set,
         cell_labelling_function,
         regulatory_constraints,
+        initial_state,
         initial_policy: np.ndarray, # should be in a cellular encoding
         reward_function=None, # todo: make this optional
     ):
@@ -46,6 +48,8 @@ class PeUcrlAgent:
         # compute additional parameters
         self.n_states = n_intracellular_states ** n_cells
         self.n_actions = n_intracellular_actions ** n_cells
+
+        self.initial_flat_state = self.cellular_encoding(initial_state)
 
         self.reward_function = np.zeros((self.n_states, self.n_actions))
         for flat_state in range(self.n_states):
@@ -79,6 +83,52 @@ class PeUcrlAgent:
         self.previous_state = None
         self.current_state = None
         self.action_sampled = False
+
+        # initialise prism
+        system("rm -f agents/prism/constraints.props")
+        system("cp " + self.regulatory_constraints + " agents/prism/constraints.props")
+
+        system('rm -f agents/prism/model.prism')
+        system("touch agents/prism/model.prism")
+        prism_file = open('agents/prism/model.prism', 'a')
+
+        prism_file.write('dtmc\n\n')
+        
+        for cell in range(self.n_cells):
+
+            for flat_state in range(self.n_intracellular_states):
+                for flat_next_state in range(self.n_intracellular_states-1):
+                    prism_file.write('const double p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ';\n')
+                prism_file.write('const double p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states-1) + ' = 1')
+                for flat_next_state in range(self.n_intracellular_states-1):
+                    prism_file.write(' - p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state))
+                prism_file.write(';\n\n')
+
+            for flat_state in range(self.n_intracellular_states):
+                prism_file.write('const int C_' + str(flat_state) + '=1;\n')
+            
+            prism_file.write('\nmodule cell' + str(cell) + '\n\n')
+
+            prism_file.write('s' + str(cell) + ' : [0..' + str(self.n_intracellular_states) + '] init ' + str(self.cellular_encoding(initial_state)[cell]) + ';\n')
+            prism_file.write('c' + str(cell) + ' : [0..1] init C_' + str(self.cellular_encoding(initial_state)[cell]) + ';\n\n')
+
+            for flat_state in range(self.n_intracellular_states):
+                prism_file.write("[] s" + str(cell) + "=" + str(flat_state) + " -> ")
+                for flat_next_state in range(self.n_intracellular_states - 1):
+                    prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ":(s'" + str(cell) + "=" + str(flat_next_state) + ") & (c" + str(cell) + "'=C_" + str(flat_next_state) + ") + ")
+                prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states - 1) + ":(s'" + str(cell) + "=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=C_" + str(self.n_intracellular_states - 1) + ");\n")
+            
+            prism_file.write("\nendmodule\n\n")
+
+        prism_file.write("formula n = ")
+        for cell in range(self.n_cells):
+            prism_file.write("c" + str(cell) + " + ")
+        prism_file.write("0;\n")
+        for count, cell_class in enumerate(self.cell_classes):
+            prism_file.write("formula n_" + cell_class + " = ")
+            for cell in self.cell_labelling_function[count]:
+                prism_file.write("c" + str(cell) + " + ")
+            prism_file.write("0;\n")
 
 
     def sample_action(
@@ -411,9 +461,47 @@ class PeUcrlAgent:
         tmp_policy,
     ):
 
-        # here I reshape the data and call an external verification framework
+        #verified = True
+        verified = self.prism_verify(tmp_policy)
 
         return True
+
+
+    def prism_verify(
+        self,
+        tmp_policy,
+    ):
+
+        # create modelfile
+
+        # create param arg (note that current versions of prism requires this to be called from the command line)
+        param_arg = ''
+        for flat_state in range(self.n_states):
+            flat_action = self._flatten(action=tmp_policy[:, flat_state])
+            for flat_next_state in range(self.n_states - 1): # maybe add the policy in here as well?
+                lb = max([0, self.transition_estimates[flat_state, flat_action, flat_next_state] - self.transition_errors[flat_state, flat_action]]) # right float format?
+                ub = min([1, self.transition_estimates[flat_state, flat_action, flat_next_state] + self.transition_errors[flat_state, flat_action]])
+                param_arg += 'p' + str(flat_state) + "_" + str(flat_next_state) + '=' + str(lb) + ':' + str(ub) + ','
+        
+        # perform verification
+        system('rm -f output.txt')
+        system('cd agents/prism; prism model.prism constraints.props -param ' + param_arg[:-1] + ' > output.txt' )
+        with open('agents/prism/output.txt', 'r') as file:
+            line_set = file.read()
+            occurances = 0
+            for line in line_set:
+                if 'Result:' in line:
+                    occurances += 1
+                    if 'true' in line:
+                        verified = True
+                    elif 'false' in line:
+                        verified = False
+                    else:
+                        occurances = 'at least 1 non-Boolean'
+            if occurances != 1:
+                raise ValueError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
+
+        return verified
 
 
 
