@@ -13,7 +13,7 @@ from copy import deepcopy
 config_file = open("config_files/peucrl_polarisation_0.json", 'r')
 config = load(config_file)
 
-print("\n Config:")
+print("\nConfig:")
 pprint(config)
 
 # instantiate environment
@@ -57,7 +57,44 @@ agt = PeUcrlAgent(
 
 ################################################################
 
+# initialise data-saving structures
+reward_cumulation = np.zeros(config["max_time_steps"]) * np.nan
+side_effects_incidence = np.zeros(config["max_time_steps"]) * np.nan
+ns_between_time_steps = np.zeros(config["max_time_steps"]) * np.nan
+ns_between_episodes = np.zeros(config["max_time_steps"]) * np.nan
 
+# print
+print("")
+print("intialisation")
+print("state:", previous_state)
+
+for time_step in range(config["max_time_steps"]):
+
+    # interact
+    action = agt.sample_action(previous_state)
+    current_state, reward, terminated, truncated, info = env.step(action)
+    agt.update(current_state, reward, info["side_effects"])
+
+    # save data
+    reward_cumulation[time_step] = reward
+    side_effects_incidence[time_step] = env.get_side_effects_incidence()
+    ns_between_time_steps[time_step] = agt.get_ns_between_time_steps()
+    ns_between_episodes[time_step] = agt.get_ns_between_episodes()
+
+    # print
+    if time_step <= 1 or terminated or truncated or time_step >= config["max_time_steps"] - 2:
+        print("")
+        print("Time step:", time_step)
+        print("action:", action)
+        print("state:", current_state)
+        print("reward:", reward)
+        print("side effects:")
+        pprint(info["side_effects"])
+
+    if terminated or truncated:
+        break
+
+    previous_state = current_state
 
 #action = agt.sample_action(previous_state)
 #current_state, reward, terminated, truncated, info = env.step(action)

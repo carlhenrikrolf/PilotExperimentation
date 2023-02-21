@@ -93,8 +93,15 @@ class PeUcrlAgent:
         prism_file = open('agents/prism/model.prism', 'a')
 
         prism_file.write('dtmc\n\n')
+
+        for flat_state in range(self.n_intracellular_states):
+            prism_file.write('const int C_' + str(flat_state) + ';\n')
+        prism_file.write('\n')
         
         for cell in range(self.n_cells):
+
+            prism_file.write('const int sinit' +str(cell) + ';\n')
+            prism_file.write('const int cinit' + str(cell) + ';\n\n')
 
             for flat_state in range(self.n_intracellular_states):
                 for flat_next_state in range(self.n_intracellular_states-1):
@@ -103,20 +110,17 @@ class PeUcrlAgent:
                 for flat_next_state in range(self.n_intracellular_states-1):
                     prism_file.write(' - p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state))
                 prism_file.write(';\n\n')
-
-            for flat_state in range(self.n_intracellular_states):
-                prism_file.write('const int C_' + str(flat_state) + '=1;\n')
             
-            prism_file.write('\nmodule cell' + str(cell) + '\n\n')
+            prism_file.write('module cell' + str(cell) + '\n\n')
 
-            prism_file.write('s' + str(cell) + ' : [0..' + str(self.n_intracellular_states) + '] init ' + str(self.cellular_encoding(initial_state)[cell]) + ';\n')
-            prism_file.write('c' + str(cell) + ' : [0..1] init C_' + str(self.cellular_encoding(initial_state)[cell]) + ';\n\n')
+            prism_file.write('s' + str(cell) + ' : [0..' + str(self.n_intracellular_states) + '] init sinit' + str(cell) + ';\n')
+            prism_file.write('c' + str(cell) + ' : [0..1] init cinit' + str(cell) + ';\n\n')
 
             for flat_state in range(self.n_intracellular_states):
                 prism_file.write("[] s" + str(cell) + "=" + str(flat_state) + " -> ")
                 for flat_next_state in range(self.n_intracellular_states - 1):
-                    prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ":(s'" + str(cell) + "=" + str(flat_next_state) + ") & (c" + str(cell) + "'=C_" + str(flat_next_state) + ") + ")
-                prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states - 1) + ":(s'" + str(cell) + "=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=C_" + str(self.n_intracellular_states - 1) + ");\n")
+                    prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ":(s" + str(cell) + "'=" + str(flat_next_state) + ") & (c" + str(cell) + "'=C_" + str(flat_next_state) + ") + ")
+                prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states - 1) + ":(s" + str(cell) + "'=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=C_" + str(self.n_intracellular_states - 1) + ");\n")
             
             prism_file.write("\nendmodule\n\n")
 
@@ -129,6 +133,8 @@ class PeUcrlAgent:
             for cell in self.cell_labelling_function[count]:
                 prism_file.write("c" + str(cell) + " + ")
             prism_file.write("0;\n")
+
+        prism_file.close()
 
 
     def sample_action(
@@ -284,14 +290,29 @@ class PeUcrlAgent:
             [self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]] for cell in range(self.n_cells)]
         )
 
-        # update errors
-        self.transition_errors[flat_previous_state, flat_action] = np.sqrt(
-            (
-                14 * self.n_states * np.log(2 * self.n_actions * self.time_step)
-            ) / (
-                max([1, self.cellular_previous_episodes_count[flat_previous_state, flat_action]])
-            )
-        )
+        # update errors for state--action pairs
+        for flat_state in range(self.n_states):
+            for flat_action in range(self.n_actions):
+                self.transition_errors[flat_previous_state, flat_action] = np.sqrt(
+                    (
+                        14 * self.n_states * np.log(2 * self.n_actions * self.time_step / self.confidence_level)
+                    ) / (
+                        max([1, self.cellular_previous_episodes_count[flat_state, flat_action]])
+                    )
+                )
+
+        # update errors for intracellular state--action pairs
+        # note that this does increase the computational complexity, but maybe it is small in comparison to model-checking?
+        for intracellular_state in range(self.n_intracellular_states):
+            for intracellular_action in range(self.n_intracellular_actions):
+                self.intracellular_transition_errors[intracellular_state, intracellular_action] = np.sqrt(
+                    (
+                        14 * self.n_intracellular_states * np.log(2 * self.n_intracellular_actions * self.time_step / self.confidence_level)
+                    ) / (
+                        max([1, self.intracellular_episode_count[intracellular_state, intracellular_action]]) # double-check this?
+                    )
+                )
+
 
     def _flatten(
         self,
@@ -328,62 +349,6 @@ class PeUcrlAgent:
             raise ValueError('flat_state or flat_action must be an integer')
 
         return tabular2cellular(obj, m, self.n_cells)
-    
-    def _old_flatten(
-        self,
-        state=None,
-        action=None,
-    ):
-
-        assert (state is None) ^ (action is None)
-        if type(state) is np.ndarray:
-            n = self.n_intracellular_states
-            obj = state
-        elif type(action) is np.ndarray:
-            n = self.n_intracellular_actions
-            obj = action
-        else:
-            raise ValueError('state or action must be an array')
-
-        bit_length = math.ceil(np.log2(n)) #(n - 1).bit_length()
-        bin_array = np.zeros((self.n_cells, bit_length))
-        for cell in range(self.n_cells):
-            bin_string = bin(obj[cell])[2:]
-            start_bit = bit_length - len(bin_string)
-            for bit in range(start_bit, bit_length):
-                bin_array[cell, bit] = int(bin_string[bit - start_bit])
-        bin_list = np.reshape(bin_array, np.prod(np.shape(bin_array)))#np.ravel(bin_array)
-        integer = int(np.dot(np.flip(bin_list), 2 ** np.arange(bin_list.size)))
-        return integer
-
-    
-    def _old_unflatten(
-        self,
-        flat_state=None,
-        flat_action=None,
-    ):
-
-        assert (flat_state is None) ^ (flat_action is None)
-        if type(flat_state) is int:
-            n = self.n_intracellular_states
-            obj = flat_state
-        elif type(flat_action) is int:
-            n = self.n_intracellular_actions
-            obj = flat_action
-        else:
-            raise ValueError('flat_state or flat_action must be an integer')
-
-        binary = bin(obj)[2:]
-        bit_length = self.n_cells * math.ceil(np.log2(n))#(n**self.n_cells - 1).bit_length()
-        bin_list = np.zeros(bit_length)
-        start_bit = bit_length - len(binary)
-        for bit in range(start_bit, bit_length):
-            bin_list[bit] = int(binary[bit - start_bit])
-        bin_array = np.reshape(bin_list, (self.n_cells, int(bit_length / self.n_cells)))
-        int_list = np.zeros(self.n_cells, dtype=int)
-        for cell in range(self.n_cells):
-            int_list[cell] = np.dot(np.flip(bin_array[cell]), 2 ** np.arange(bin_array[cell].size))
-        return int_list
 
 
     def _inner_max(
@@ -472,34 +437,66 @@ class PeUcrlAgent:
         tmp_policy,
     ):
 
-        # create modelfile
+        # write constants argument
+        const_arg = ''
+        for intracellular_state in range(self.n_intracellular_states):
+            safety = int('unsafe' in self.side_effects_functions[intracellular_state] or 'silent' in self.side_effects_functions[intracellular_state])
+            const_arg += 'C_' + str(intracellular_state) + '=' + str(safety) + ','
+        for cell in range(self.n_cells):
+            const_arg += 'sinit' + str(cell) + '=' + str(self.current_state[cell]) + ','
+            safety = int('unsafe' in self.side_effects_functions[self.current_state[cell]] or 'silent' in self.side_effects_functions[self.current_state[cell]])
+            const_arg += 'cinit' + str(cell) + '=' + str(safety) + ','
+        system('rm -f agents/prism/const.txt')
+        system('touch agents/prism/const.txt')
+        const_file = open('agents/prism/const.txt', 'w')
+        const_file.write(const_arg[:-1])
+        const_file.close()
 
-        # create param arg (note that current versions of prism requires this to be called from the command line)
+        # write parameters argument, note that the current version of prism can only import this via commandline
         param_arg = ''
-        for flat_state in range(self.n_states):
-            flat_action = self._flatten(action=tmp_policy[:, flat_state])
-            for flat_next_state in range(self.n_states - 1): # maybe add the policy in here as well?
-                lb = max([0, self.transition_estimates[flat_state, flat_action, flat_next_state] - self.transition_errors[flat_state, flat_action]]) # right float format?
-                ub = min([1, self.transition_estimates[flat_state, flat_action, flat_next_state] + self.transition_errors[flat_state, flat_action]])
-                param_arg += 'p' + str(flat_state) + "_" + str(flat_next_state) + '=' + str(lb) + ':' + str(ub) + ','
+        for cell in range(self.n_cells):
+            for flat_state in range(self.n_states):
+                intracellular_state = self._unflatten(flat_state=flat_state)[cell]
+                intracellular_action = tmp_policy[cell, flat_state]
+                adds_up = 0 # check
+                for next_intracellular_state in range(self.n_intracellular_states):
+                    lb = max(
+                        [0,
+                        self.intracellular_transition_estimates[intracellular_state, intracellular_action, next_intracellular_state] - self.intracellular_transition_errors[intracellular_state, intracellular_action]]
+                    )
+                    ub = min(
+                        [1,
+                        self.intracellular_transition_estimates[intracellular_state, intracellular_action, next_intracellular_state] + self.intracellular_transition_errors[intracellular_state, intracellular_action]]
+                    )
+                    param_arg += 'p' + str(cell) + '_' + str(intracellular_state) + '_' + str(next_intracellular_state) + '=' + str(lb) + ':' + str(ub) + ','
+                    adds_up += ub # check
+                assert adds_up >= 1
+        system('rm -f agents/prism/param.txt')
+        system('touch agents/prism/param.txt')
+        param_file = open('agents/prism/param.txt', 'w')
+        param_file.write(param_arg[:-1])
+        param_file.close()
         
         # perform verification
-        system('rm -f output.txt')
-        system('cd agents/prism; prism model.prism constraints.props -param ' + param_arg[:-1] + ' > output.txt' )
-        with open('agents/prism/output.txt', 'r') as file:
-            line_set = file.read()
-            occurances = 0
-            for line in line_set:
-                if 'Result:' in line:
-                    occurances += 1
-                    if 'true' in line:
-                        verified = True
-                    elif 'false' in line:
-                        verified = False
-                    else:
-                        occurances = 'at least 1 non-Boolean'
-            if occurances != 1:
+        system('rm -f agents/prism/output.txt')
+        system('touch agents/prism/output.txt')
+        #system('cd agents/prism; co=$(< const.txt); pa=$(< param.txt); prism model.prism constraints.props -const $co -param $pa &>> output.txt 2>&1')
+        system('cd agents/prism; prism model.prism constraints.props -const ' + const_arg[:-1] + ' -param ' + param_arg[:-1] + ' >> output.txt 2>&1')
+        output_file = open('agents/prism/output.txt', 'r')
+        line_set = output_file.readlines()
+        occurances = 0
+        for line in reversed(line_set):
+            if 'Result:' in line:
+                occurances += 1
+                if 'true' in line:
+                    verified = True
+                elif 'false' in line:
+                    verified = False
+                else:
+                    raise ValueError('Verification returned non-Boolean result.')
+        if occurances != 1:
                 raise ValueError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
+        output_file.close()
 
         return verified
 
