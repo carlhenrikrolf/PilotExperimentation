@@ -1,5 +1,5 @@
 {
-    "constraints_file_path": "constraints/gdpr_recommendations_0.props",
+    "regulatory_constraints": "P>=1 [ G n <= 1]",
     "environment_version": "gym_cellular/Polarisation-v2",
     "environment_seed": 0,
     "n_users": 3,

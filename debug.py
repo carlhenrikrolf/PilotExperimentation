@@ -10,7 +10,7 @@ from pprint import pprint
 from copy import deepcopy
 
 # import configurations
-config_file = open("config_files/peucrl_polarisation_0.json", 'r')
+config_file = open("config_files/peucrl_polarisation_2.json", 'r')
 config = load(config_file)
 
 print("\nConfig:")

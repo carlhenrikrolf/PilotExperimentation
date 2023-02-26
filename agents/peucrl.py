@@ -6,6 +6,8 @@ from time import perf_counter_ns
 import math
 from agents.utils.space_transformations import cellular2tabular, tabular2cellular
 from os import system
+from copy import deepcopy, copy
+from pprint import pprint
 
 
 
@@ -25,7 +27,7 @@ class PeUcrlAgent:
         regulatory_constraints,
         initial_state,
         initial_policy: np.ndarray, # should be in a cellular encoding
-        reward_function=None, # todo: make this optional
+        reward_function, # todo: make this optional
     ):
 
         # check correctness of inputs
@@ -57,8 +59,10 @@ class PeUcrlAgent:
                 self.reward_function[flat_state,flat_action] = reward_function(flat_state,flat_action)
 
         # initialise behaviour policy
-        self.behaviour_policy = initial_policy # using some kind of conversion?
-        self.target_policy = np.zeros((self.n_cells, self.n_states), dtype=int)
+        self.initial_policy = initial_policy
+        self.behaviour_policy = deepcopy(self.initial_policy) # using some kind of conversion?
+        self.target_policy = deepcopy(self.initial_policy) #np.zeros((self.n_cells, self.n_states), dtype=int)
+        self.policy_update = np.zeros(self.n_cells, dtype=int)
 
         # initialise counts to 0
         self.time_step = 0
@@ -72,7 +76,7 @@ class PeUcrlAgent:
         self.intracellular_transition_sum = np.zeros((self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states), dtype=int)
 
         # initialise statistics
-        self.side_effects_functions = [{'safe', 'unsafe', 'silent'} for _ in range(n_intracellular_states)]
+        self.side_effects_functions = [{'safe', 'unsafe'} for _ in range(n_intracellular_states)]
         self.intracellular_transition_estimates = np.zeros((self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states))
         self.intracellular_transition_errors = np.zeros((self.n_intracellular_states, self.n_intracellular_actions))
         self.intracellular_transition_indicators = np.ones((self.n_intracellular_states, self.n_intracellular_actions))
@@ -84,9 +88,15 @@ class PeUcrlAgent:
         self.current_state = None
         self.action_sampled = False
 
+        self.n_policy_changes = 0
+
         # initialise prism
-        system("rm -f agents/prism/constraints.props")
-        system("cp " + self.regulatory_constraints + " agents/prism/constraints.props")
+        system("cd agents/prism; rm -f constraints.props; touch constraints.props")
+        props_file = open('agents/prism/constraints.props', 'a')
+        props_file.write(self.regulatory_constraints)
+        props_file.close()
+        #system("rm -f agents/prism/constraints.props")
+        #system("cp " + self.regulatory_constraints + " agents/prism/constraints.props")
 
         system('rm -f agents/prism/model.prism')
         system("touch agents/prism/model.prism")
@@ -100,8 +110,9 @@ class PeUcrlAgent:
         
         for cell in range(self.n_cells):
 
-            prism_file.write('const int sinit' +str(cell) + ';\n')
-            prism_file.write('const int cinit' + str(cell) + ';\n\n')
+            prism_file.write('const int sinit' + str(cell) + ';\n')
+            prism_file.write('const int cinit' + str(cell) + ';\n')
+            prism_file.write('const int piupdate' + str(cell) + ';\n\n')
 
             for flat_state in range(self.n_intracellular_states):
                 for flat_next_state in range(self.n_intracellular_states-1):
@@ -119,8 +130,8 @@ class PeUcrlAgent:
             for flat_state in range(self.n_intracellular_states):
                 prism_file.write("[] s" + str(cell) + "=" + str(flat_state) + " -> ")
                 for flat_next_state in range(self.n_intracellular_states - 1):
-                    prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ":(s" + str(cell) + "'=" + str(flat_next_state) + ") & (c" + str(cell) + "'=C_" + str(flat_next_state) + ") + ")
-                prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states - 1) + ":(s" + str(cell) + "'=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=C_" + str(self.n_intracellular_states - 1) + ");\n")
+                    prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ":(s" + str(cell) + "'=" + str(flat_next_state) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(flat_next_state) + ")) + ")
+                prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states - 1) + ":(s" + str(cell) + "'=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(self.n_intracellular_states - 1) + "));\n")
             
             prism_file.write("\nendmodule\n\n")
 
@@ -148,12 +159,11 @@ class PeUcrlAgent:
         self.action_sampled = True
 
         # update state, action
-        self.previous_state = self.cellular_encoding(previous_state)
+        self.previous_state = self.cellular_encoding(previous_state) # dict
         self.flat_previous_state = self._flatten(state=self.previous_state)
-        self.action = self.behaviour_policy[:, self.flat_previous_state]
-        
-        # return action
-        return self.cellular_decoding(self.action)
+        self.cellular_action = deepcopy(self.behaviour_policy[:, self.flat_previous_state])
+        self.action = self.cellular_decoding(self.cellular_action)
+        return self.action
 
 
     def update(
@@ -170,8 +180,8 @@ class PeUcrlAgent:
         self.start_time_step = perf_counter_ns()
 
         self.action_sampled = False
-        self.current_state = self.cellular_encoding(current_state)
-        self.flat_action = self._flatten(state=self.action)
+        self.current_state = self.cellular_encoding(deepcopy(current_state)) # dict
+        self.flat_action = self._flatten(action=self.action)
         self.flat_current_state = self._flatten(state=self.current_state)
         self.reward = reward
         if side_effects is None:
@@ -186,8 +196,8 @@ class PeUcrlAgent:
         self.time_step += 1
 
         # off-policy
-        next_action = self.behaviour_policy[:, self._flatten(state=self.current_state)]
-        new_episode = (self.current_episode_count[self._flatten(state=self.current_state), self._flatten(action=next_action)] >= max(1, self.previous_episodes_count[self._flatten(self.current_state), self._flatten(next_action)]))
+        next_action = deepcopy(self.behaviour_policy[:, self._flatten(state=self.current_state)])
+        new_episode = (self.current_episode_count[self._flatten(state=self.current_state), self._flatten(action=next_action)] >= max([1, self.previous_episodes_count[self._flatten(state=self.current_state), self._flatten(action=next_action)]]))
         
         self.end_time_step = perf_counter_ns()
         self.start_episode = np.nan
@@ -199,8 +209,12 @@ class PeUcrlAgent:
 
             self._update_confidence_sets()
             self._extended_value_iteration()
+            #
+            # random exploration
+            self.target_policy = deepcopy(np.random.randint(0, self.n_intracellular_actions, size=(self.n_cells, self.n_states)))
+            #
             self._pe_shield()
-            #self.current_episode_time_step = self.time_step # is this right? If not, could I just use the time step?
+            self.current_episode_time_step = self.time_step # is this right? If not, could I just use the time step?
             self.previous_episodes_count += self.current_episode_count
             self.cellular_previous_episodes_count += self.cellular_current_episode_count
 
@@ -293,7 +307,7 @@ class PeUcrlAgent:
         # update errors for state--action pairs
         for flat_state in range(self.n_states):
             for flat_action in range(self.n_actions):
-                self.transition_errors[flat_previous_state, flat_action] = np.sqrt(
+                self.transition_errors[flat_state, flat_action] = np.sqrt(
                     (
                         14 * self.n_states * np.log(2 * self.n_actions * self.time_step / self.confidence_level)
                     ) / (
@@ -359,12 +373,17 @@ class PeUcrlAgent:
     ):
 
         #flat_state = self._flatten(state=state)
+        initial_sorted_states = list(np.argsort(value))
+        max_set = list(np.argwhere(value == np.amax(value))[:,0])
+        permuted_max_set = np.random.permutation(max_set)
+        sorted_states = [*initial_sorted_states[:-len(max_set)], *permuted_max_set]
         #flat_action = self._flatten(action=action)
-        sorted_states = np.argsort(value)
+        #sorted_states = np.argsort(value)
         max_p = np.zeros(self.n_states)
         for flat_next_state in range(self.n_states):
             max_p[flat_next_state] = self.transition_estimates[flat_state,flat_action,flat_next_state]
         #x = self.transition_estimates[flat_state,flat_action,sorted_states[-1]] + self.transition_errors[flat_state, flat_action]
+        #max_p[sorted_states[-1]] = min(
         max_p[sorted_states[-1]] = min(
             [
                 1,
@@ -392,33 +411,42 @@ class PeUcrlAgent:
             for flat_state in range(self.n_states):
                 values = [(self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value)) for flat_action in range(self.n_actions)]
                 current_value[flat_state] = max(values)
-                max_flat_action = int(np.argmax(values))
+                max_flat_action_set = list(np.argwhere(values == np.amax(values))[:,0])
+                if len(max_flat_action_set) > 1:
+                    print("eq acts:", len(max_flat_action_set))
+                max_flat_action = int(random.sample(max_flat_action_set, 1)[0])
                 max_action = self._unflatten(flat_action=max_flat_action)
-                self.target_policy[:, flat_state] = max_action
+                self.target_policy[:, flat_state] = deepcopy(max_action)
             max_diff = max([current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)])
             min_diff = min([current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)])
             stop = (max_diff - min_diff < self.accuracy)
             previous_value = current_value
+        self.value_function = current_value # for testing purposes
 
     def _pe_shield(self):
         
-        tmp_policy = self.behaviour_policy
+        tmp_policy = deepcopy(self.behaviour_policy)
         cell_set = set(range(self.n_cells))
         while len(cell_set) >= 1:
             cell = self._cell_prioritisation(cell_set)
-            cell_set -= set(cell)
-            tmp_policy[cell, :] = self.target_policy[cell, :]
+            cell_set -= {cell}
+            tmp_policy[cell, :] = deepcopy(self.target_policy[cell, :])
             verified = self._verify(tmp_policy)
-            if not verified:
-                tmp_policy[cell, :] = self.behaviour_policy[cell, :]
-        self.behaviour_policy = tmp_policy
+            if verified:
+                self.policy_update[cell] == 1
+            else:
+                tmp_policy[cell, :] = deepcopy(self.behaviour_policy[cell, :])
+        if (tmp_policy != self.behaviour_policy).any():
+            self.n_policy_changes += 1
+        self.behaviour_policy = deepcopy(tmp_policy)
+        
 
     def _cell_prioritisation(
         self,
         cell_set: set,
     ):
 
-        cell = random.sample(cell_set, 1)
+        cell = random.sample(cell_set, 1)[0]
         return cell
 
     def _verify(
@@ -429,7 +457,7 @@ class PeUcrlAgent:
         #verified = True
         verified = self.prism_verify(tmp_policy)
 
-        return True
+        return verified
 
 
     def prism_verify(
@@ -440,12 +468,13 @@ class PeUcrlAgent:
         # write constants argument
         const_arg = ''
         for intracellular_state in range(self.n_intracellular_states):
-            safety = int('unsafe' in self.side_effects_functions[intracellular_state] or 'silent' in self.side_effects_functions[intracellular_state])
-            const_arg += 'C_' + str(intracellular_state) + '=' + str(safety) + ','
+            unsafety = int('unsafe' in self.side_effects_functions[intracellular_state])
+            const_arg += 'C_' + str(intracellular_state) + '=' + str(unsafety) + ','
         for cell in range(self.n_cells):
             const_arg += 'sinit' + str(cell) + '=' + str(self.current_state[cell]) + ','
-            safety = int('unsafe' in self.side_effects_functions[self.current_state[cell]] or 'silent' in self.side_effects_functions[self.current_state[cell]])
-            const_arg += 'cinit' + str(cell) + '=' + str(safety) + ','
+            unsafety = int('unsafe' in self.side_effects_functions[self.current_state[cell]])
+            const_arg += 'cinit' + str(cell) + '=' + str(unsafety*self.policy_update[cell]) + ','
+            const_arg += 'piupdate' + str(cell) + '=' + str(self.policy_update[cell]) + ','
         system('rm -f agents/prism/const.txt')
         system('touch agents/prism/const.txt')
         const_file = open('agents/prism/const.txt', 'w')
