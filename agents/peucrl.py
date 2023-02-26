@@ -25,7 +25,6 @@ class PeUcrlAgent:
         cell_classes: set,
         cell_labelling_function,
         regulatory_constraints,
-        initial_state,
         initial_policy: np.ndarray, # should be in a cellular encoding
         reward_function, # todo: make this optional
     ):
@@ -50,8 +49,6 @@ class PeUcrlAgent:
         # compute additional parameters
         self.n_states = n_intracellular_states ** n_cells
         self.n_actions = n_intracellular_actions ** n_cells
-
-        self.initial_flat_state = self.cellular_encoding(initial_state)
 
         self.reward_function = np.zeros((self.n_states, self.n_actions))
         for flat_state in range(self.n_states):
@@ -208,7 +205,7 @@ class PeUcrlAgent:
             self.start_episode = perf_counter_ns()
 
             self._update_confidence_sets()
-            self._extended_value_iteration()
+            #self._extended_value_iteration()
             #
             # random exploration
             self.target_policy = deepcopy(np.random.randint(0, self.n_intracellular_actions, size=(self.n_cells, self.n_states)))
