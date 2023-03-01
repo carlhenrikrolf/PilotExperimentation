@@ -205,10 +205,10 @@ class PeUcrlAgent:
             self.start_episode = perf_counter_ns()
 
             self._update_confidence_sets()
-            #self._extended_value_iteration()
+            self._extended_value_iteration()
             #
             # random exploration
-            self.target_policy = deepcopy(np.random.randint(0, self.n_intracellular_actions, size=(self.n_cells, self.n_states)))
+            #self.target_policy = deepcopy(np.random.randint(0, self.n_intracellular_actions, size=(self.n_cells, self.n_states)))
             #
             self._pe_shield()
             self.current_episode_time_step = self.time_step # is this right? If not, could I just use the time step?
@@ -290,7 +290,7 @@ class PeUcrlAgent:
 
         # update estimates
         for cell in range(self.n_cells):
-            self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]] = self.intracellular_transition_sum[self.previous_state[cell], self.action[cell], self.current_state[cell]] / self.intracellular_sum[self.previous_state[cell], self.action[cell]]
+            self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]] = self.intracellular_transition_sum[self.previous_state[cell], self.action[cell], self.current_state[cell]] / max([1, self.intracellular_sum[self.previous_state[cell], self.action[cell]]])
             # prune
             self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], :]  *= self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]]
         
