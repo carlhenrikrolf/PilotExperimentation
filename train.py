@@ -25,15 +25,15 @@ config_file = open(config_file_path, 'r')
 config = load(config_file)
 config_file.close()
 system('cp ' + config_file_path + ' ' + experiment_path)
+print('\nSTARTED TRAINING \n')
 print('configurations:')
 pprint(config)
 
-# instantiate peucrl in polarisation
-if 'peucrl' in config_file_name and 'polarisation' in config_file_name:
+# instantiate polarisation
+if 'polarisation' in config_file_name:
 
     system('cd ..; pip3 install -e gym-cellular -q')
     import gym_cellular
-    from agents import PeUcrlAgent
 
     # instantiate environment
     env = gym.make(
@@ -45,8 +45,19 @@ if 'peucrl' in config_file_name and 'polarisation' in config_file_name:
         seed=config["environment_seed"],
     )
 
+if 'peucrl' in config_file_name:
+
+    if 'minus_r_minus_shield' in config_file_name:
+        from agents import PeUcrlMinusRMinusShieldAgent as Agent
+    elif 'minus_evi' in config_file_name:
+        from agents import PeUcrlMinusEviAgent as Agent
+    elif 'minus_shield' in config_file_name:
+        from agents import PeUcrlMinusShieldAgent as Agent
+    else:
+        from agents import PeUcrlAgent as Agent
+
     # instantiate agent
-    agt = PeUcrlAgent(
+    agt = Agent(
         confidence_level=config["confidence_level"],
         accuracy=config["accuracy"],
         n_cells=config["n_users"],
@@ -99,3 +110,5 @@ for time_step in range(config["max_time_steps"]):
     else:
         stdout.write('\033[3K')
         print("time step:", time_step + 1, end='\r')
+
+print('\nTRAINING ENDED \n')

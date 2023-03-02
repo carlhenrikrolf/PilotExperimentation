@@ -206,10 +206,6 @@ class PeUcrlAgent:
 
             self._update_confidence_sets()
             self._extended_value_iteration()
-            #
-            # random exploration
-            #self.target_policy = deepcopy(np.random.randint(0, self.n_intracellular_actions, size=(self.n_cells, self.n_states)))
-            #
             self._pe_shield()
             self.current_episode_time_step = self.time_step # is this right? If not, could I just use the time step?
             self.previous_episodes_count += self.current_episode_count
