@@ -2,14 +2,15 @@
 
 # import modules
 import gymnasium as gym
-from json import load
+from json import load, dumps
 from os import system
 from pprint import pprint
 from sys import argv, stdout
 
 # take arguments
-config_file_name = argv[1]
-experiment_dir = argv[2]
+agent_id = argv[1]
+config_file_name = argv[2]
+experiment_dir = argv[3]
 
 # define output directory
 if experiment_dir[-1] != '/':
@@ -24,7 +25,12 @@ config_file_path = 'config_files/' + config_file_name
 config_file = open(config_file_path, 'r')
 config = load(config_file)
 config_file.close()
-system('cp ' + config_file_path + ' ' + experiment_path)
+config['agent'] = agent_id
+system('touch ' + experiment_path + config_file_name)
+new_config_file = open(experiment_path + config_file_name, 'w')
+new_config_file.write(dumps(config, indent=4))
+new_config_file.close()
+#system('cp ' + config_file_path + ' ' + experiment_path)
 print('\nSTARTED TRAINING \n')
 print('configurations:')
 pprint(config)
@@ -45,13 +51,13 @@ if 'polarisation' in config_file_name:
         seed=config["environment_seed"],
     )
 
-if 'peucrl' in config_file_name:
+if 'peucrl' in agent_id:
 
-    if 'minus_r_minus_shield' in config_file_name:
+    if 'minus_r_minus_shield' in agent_id:
         from agents import PeUcrlMinusRMinusShieldAgent as Agent
-    elif 'minus_evi' in config_file_name:
+    elif 'minus_evi' in agent_id:
         from agents import PeUcrlMinusEviAgent as Agent
-    elif 'minus_shield' in config_file_name:
+    elif 'minus_shield' in agent_id:
         from agents import PeUcrlMinusShieldAgent as Agent
     else:
         from agents import PeUcrlAgent as Agent
@@ -111,4 +117,4 @@ for time_step in range(config["max_time_steps"]):
         stdout.write('\033[3K')
         print("time step:", time_step + 1, end='\r')
 
-print('\nTRAINING ENDED \n')
+print('\nTRAINING ENDED\n')

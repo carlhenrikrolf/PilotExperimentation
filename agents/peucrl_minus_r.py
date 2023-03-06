@@ -45,7 +45,7 @@ class PeUcrlMinusRAgent(PeUcrlAgent):
         self.reward_sum[self.flat_previous_state, flat_action] += reward
         super().update(state, reward, side_effects)
 
-    def _expected_value_iteration(self):
+    def _extended_value_iteration(self):
 
         for flat_state in range(self.n_states):
             for flat_action in range(self.n_actions):
@@ -64,4 +64,4 @@ class PeUcrlMinusRAgent(PeUcrlAgent):
                     [1,
                     self.reward_estimates[flat_state, flat_action] + self.reward_errors[flat_state, flat_action]]
                 )
-        super()._expected_value_iteration()
+        super()._extended_value_iteration()

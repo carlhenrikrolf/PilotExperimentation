@@ -27,11 +27,16 @@ class PeUcrlAgent:
         regulatory_constraints,
         initial_policy: np.ndarray, # should be in a cellular encoding
         reward_function, # todo: make this optional
+        seed=0,
     ):
 
         # check correctness of inputs
         assert 0 < confidence_level < 1
         assert 0 < accuracy
+
+        # seed generators
+        random.seed(seed)
+        np.random.seed(seed)
 
         # point inputs to self
         self.confidence_level = confidence_level
