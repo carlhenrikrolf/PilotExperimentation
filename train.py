@@ -1,5 +1,9 @@
 """This script runs an exploring reinforcement learning agent in a specified environments. All specifications for the experiments should be given as a .json file. The path to that file is used as input to this script. Further the name of the output subdirectory in .data/ should be given as the second argument."""
 
+# settings
+render = False
+#render = True
+
 # import modules
 import gymnasium as gym
 from json import load, dumps
@@ -55,6 +59,8 @@ if 'peucrl' in agent_id:
 
     if 'minus_r_minus_shield' in agent_id:
         from agents import PeUcrlMinusRMinusShieldAgent as Agent
+    elif 'minus_r_minus_experimentation' in agent_id:
+        from agents import PeUcrlMinusRMinusExperimentationAgent as Agent
     elif 'minus_evi' in agent_id:
         from agents import PeUcrlMinusEviAgent as Agent
     elif 'minus_shield' in agent_id:
@@ -76,6 +82,7 @@ if 'peucrl' in agent_id:
         cell_labelling_function=config["cell_labelling_function"],
         regulatory_constraints=config["regulatory_constraints"],
         initial_policy=env.get_initial_policy(),
+        seed=config["agent_seed"],
     )
 
 # run agent
@@ -105,16 +112,19 @@ for time_step in range(config["max_time_steps"]):
         break
 
     # print
-    if time_step <= 0:
-        print("action:", action, "\nstate:", state, "\nreward:", reward, "\nside effects:")
-        pprint(info["side_effects"])
-        print("time step:", time_step + 1, '\n\n', end='\r')
-    elif time_step >= config["max_time_steps"] - 1:
-        print("\n\naction:", action, "\nstate:", state, "\nreward:", reward, "\nside effects:")
-        pprint(info["side_effects"])
-        print("time step:", time_step + 1)
+    if render:
+        env.render()
     else:
-        stdout.write('\033[3K')
-        print("time step:", time_step + 1, end='\r')
+        if time_step <= 0:
+            print("action:", action, "\nstate:", state, "\nreward:", reward, "\nside effects:")
+            pprint(info["side_effects"])
+            print("time step:", time_step + 1, '\n\n', end='\r')
+        elif time_step >= config["max_time_steps"] - 1:
+            print("\n\naction:", action, "\nstate:", state, "\nreward:", reward, "\nside effects:")
+            pprint(info["side_effects"])
+            print("time step:", time_step + 1)
+        else:
+            stdout.write('\033[3K')
+            print("time step:", time_step + 1, end='\r')
 
 print('\nTRAINING ENDED\n')

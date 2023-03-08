@@ -17,7 +17,7 @@ class PeUcrlAgent:
         self,
         confidence_level: float, # a parameter
         accuracy: float, # a parameter
-        n_cells: int, # prior knowledge from here and down
+        n_cells: int,
         n_intracellular_states: int,
         cellular_encoding, # states to N^n
         n_intracellular_actions: int,
@@ -26,7 +26,7 @@ class PeUcrlAgent:
         cell_labelling_function,
         regulatory_constraints,
         initial_policy: np.ndarray, # should be in a cellular encoding
-        reward_function, # todo: make this optional
+        reward_function,
         seed=0,
     ):
 
@@ -46,7 +46,6 @@ class PeUcrlAgent:
         self.cellular_encoding = cellular_encoding
         self.n_intracellular_actions = n_intracellular_actions
         self.cellular_decoding = cellular_decoding
-        #self.reward_function = lambda flat_state, flat_action: reward_function(self._unflatten(flat_state=flat_state), self._unflatten(flat_action=flat_action))
         self.cell_classes = cell_classes
         self.cell_labelling_function = cell_labelling_function
         self.regulatory_constraints = regulatory_constraints
@@ -81,7 +80,8 @@ class PeUcrlAgent:
         self.side_effects_functions = [{'safe', 'unsafe'} for _ in range(n_intracellular_states)]
         self.intracellular_transition_estimates = np.zeros((self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states))
         self.intracellular_transition_errors = np.zeros((self.n_intracellular_states, self.n_intracellular_actions))
-        self.intracellular_transition_indicators = np.ones((self.n_intracellular_states, self.n_intracellular_actions))
+        self.intracellular_transition_indicators = np.ones((self.n_intracellular_states, self.n_intracellular_actions), dtype=int)
+        self.transition_indicators = np.ones((self.n_states, self.n_actions), dtype=int)
         self.transition_estimates = np.zeros((self.n_states, self.n_actions, self.n_states))
         self.transition_errors = np.zeros((self.n_states, self.n_actions))
 
@@ -193,7 +193,7 @@ class PeUcrlAgent:
 
         # on-policy
         self._side_effects_processing()
-        self._action_pruning()
+        new_pruning = self._action_pruning()
         self._update_current_episode_counts() # moved below. Correct?
         self.time_step += 1
 
@@ -205,16 +205,17 @@ class PeUcrlAgent:
         self.start_episode = np.nan
         self.end_episode = np.nan
         
-        if new_episode:
+        if new_episode or new_pruning:
 
             self.start_episode = perf_counter_ns()
 
             self._update_confidence_sets()
-            self._extended_value_iteration()
+            self._planner()
             self._pe_shield()
-            self.current_episode_time_step = self.time_step # is this right? If not, could I just use the time step?
-            self.previous_episodes_count += self.current_episode_count
-            self.cellular_previous_episodes_count += self.cellular_current_episode_count
+
+            if new_episode:
+                self.previous_episodes_count += self.current_episode_count
+                self.cellular_previous_episodes_count += self.cellular_current_episode_count
 
             self.end_episode = perf_counter_ns()
 
@@ -260,26 +261,47 @@ class PeUcrlAgent:
     def _action_pruning(self):
 
         if self.time_step == 0:
-            self.n_unpruned_actions = np.zeros(self.n_intracellular_states) + self.n_intracellular_actions
+            #self.n_unpruned_actions = np.zeros(self.n_intracellular_states) + #self.n_intracellular_actions # remove
+            self.intracellular_action_is_pruned = np.zeros((self.n_intracellular_states, self.n_intracellular_actions), dtype=int)
+        
+        new_pruning = False
 
         # basic case
         for cell in range(self.n_cells):
             if 'unsafe' in self.side_effects_functions[self.current_state[cell]]:
+                if self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]] == 1:
+                    new_pruning = True
                 self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]] = 0
-                self.n_unpruned_actions[self.previous_state[cell]] -= 1
+                #self.n_unpruned_actions[self.previous_state[cell]] -= 1 # WRONG! need to hav a binary array and sum over action indices
         
         # corner cases
         if self.time_step == 0:
             self.path = [set() for _ in range(self.n_cells)]
         for cell in range(self.n_cells):
-            if self.n_unpruned_actions[self.previous_state[cell]] >= 2:
+            n_unpruned_actions = np.sum(self.intracellular_transition_indicators[self.previous_state[cell], :])
+            if n_unpruned_actions >= 2:
                 self.path[cell] = set()
-            elif self.n_unpruned_actions[self.previous_state[cell]] == 1:
+            elif n_unpruned_actions == 1:
                 self.path[cell].add((self.previous_state[cell], self.action[cell]))
-            if ('unsafe' in self.side_effects_functions[self.current_state[cell]]) or self.n_unpruned_actions[self.previous_state[cell]] == 0:
+            if ('unsafe' in self.side_effects_functions[self.current_state[cell]]) or n_unpruned_actions == 0:
                 for (intracellular_state, intracellular_action) in self.path[cell]:
+                    if self.intracellular_transition_indicators[intracellular_state, intracellular_action] == 1:
+                        new_pruning = True
                     self.intracellular_transition_indicators[intracellular_state, intracellular_action] = 0
-                    self.n_unpruned_actions[intracellular_state] -= 1
+                    #self.n_unpruned_actions[intracellular_state] -= 1
+
+        if new_pruning:
+            for flat_state in range(self.n_states):
+                for flat_action in range(self.n_actions):
+                    for (intracellular_state, intracellular_action) in zip(
+                                tabular2cellular(flat_state, self.n_intracellular_states, self.n_cells),
+                                tabular2cellular(flat_action, self.n_intracellular_actions, self.n_cells)
+                        ):
+                        if self.intracellular_transition_indicators[intracellular_state, intracellular_action] == 0:
+                            self.transition_indicators[flat_state, flat_action] = 0
+                            break
+        
+        return new_pruning
 
 
     def _update_confidence_sets(self):
@@ -292,8 +314,6 @@ class PeUcrlAgent:
         # update estimates
         for cell in range(self.n_cells):
             self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]] = self.intracellular_transition_sum[self.previous_state[cell], self.action[cell], self.current_state[cell]] / max([1, self.intracellular_sum[self.previous_state[cell], self.action[cell]]])
-            # prune
-            self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], :]  *= self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]]
         
         flat_previous_state = self._flatten(state=self.previous_state)
         flat_action = self._flatten(action=self.action)
@@ -314,7 +334,6 @@ class PeUcrlAgent:
                 )
 
         # update errors for intracellular state--action pairs
-        # note that this does increase the computational complexity, but maybe it is small in comparison to model-checking?
         for intracellular_state in range(self.n_intracellular_states):
             for intracellular_action in range(self.n_intracellular_actions):
                 self.intracellular_transition_errors[intracellular_state, intracellular_action] = np.sqrt(
@@ -370,18 +389,13 @@ class PeUcrlAgent:
         value,
     ):
 
-        #flat_state = self._flatten(state=state)
         initial_sorted_states = list(np.argsort(value))
         max_set = list(np.argwhere(value == np.amax(value))[:,0])
         permuted_max_set = np.random.permutation(max_set)
         sorted_states = [*initial_sorted_states[:-len(max_set)], *permuted_max_set]
-        #flat_action = self._flatten(action=action)
-        #sorted_states = np.argsort(value)
         max_p = np.zeros(self.n_states)
         for flat_next_state in range(self.n_states):
             max_p[flat_next_state] = self.transition_estimates[flat_state,flat_action,flat_next_state]
-        #x = self.transition_estimates[flat_state,flat_action,sorted_states[-1]] + self.transition_errors[flat_state, flat_action]
-        #max_p[sorted_states[-1]] = min(
         max_p[sorted_states[-1]] = min(
             [
                 1,
@@ -402,24 +416,32 @@ class PeUcrlAgent:
 
     def _extended_value_iteration(self):
 
+        quality = np.zeros((self.n_states, self.n_actions))
         previous_value = np.zeros(self.n_states)
         current_value = np.zeros(self.n_states)
         stop = False
         while not stop:
             for flat_state in range(self.n_states):
-                values = [(self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value)) for flat_action in range(self.n_actions)]
-                current_value[flat_state] = max(values)
-                max_flat_action_set = list(np.argwhere(values == np.amax(values))[:,0])
-                if len(max_flat_action_set) > 1:
-                    print("eq acts:", len(max_flat_action_set))
-                max_flat_action = int(random.sample(max_flat_action_set, 1)[0])
-                max_action = self._unflatten(flat_action=max_flat_action)
-                self.target_policy[:, flat_state] = deepcopy(max_action)
-            max_diff = max([current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)])
-            min_diff = min([current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)])
-            stop = (max_diff - min_diff < self.accuracy)
+                quality[flat_state, :] = [(self.reward_function[flat_state, flat_action] + self._inner_max(flat_state, flat_action, previous_value)) for flat_action in range(self.n_actions)]
+                quality[flat_state, :] *= 2 * self.transition_indicators[flat_state, :] - 1
+                current_value[flat_state] = max(quality[flat_state, :])
+                if current_value[flat_state] < 0:
+                    print('there is an action-free state', flat_state)
+                    current_value[flat_state] = 0
+            diff = [current_value[flat_state] - previous_value[flat_state] for flat_state in range(self.n_states)]
+            stop = (max(diff) - min(diff) < 1/self.time_step)
             previous_value = current_value
         self.value_function = current_value # for testing purposes
+        return quality
+
+    def _planner(self):
+
+        quality = self._extended_value_iteration()
+        for flat_state in range(self.n_states):
+            max_flat_action_set = list(np.argwhere(quality[flat_state, :] == np.amax(quality[flat_state, :]))[:,0])
+            max_flat_action = int(random.sample(max_flat_action_set, 1)[0])
+            max_action = tabular2cellular(max_flat_action, self.n_intracellular_actions, self.n_cells)
+            self.target_policy[:, flat_state] = deepcopy(max_action)
 
     def _pe_shield(self):
         

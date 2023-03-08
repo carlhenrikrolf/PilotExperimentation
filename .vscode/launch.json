@@ -20,6 +20,15 @@
                 "host": "localhost",
                 "port": 5678
             },
+        },
+        {
+            "name": "Python: Remote Attach",
+            "type": "python",
+            "request": "attach",
+            "connect": {
+                "host": "155.198.192.32",
+                "port": 5678
+            },
         }
     ]
 }
