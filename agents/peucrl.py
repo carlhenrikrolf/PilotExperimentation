@@ -13,6 +13,8 @@ from pprint import pprint
 
 class PeUcrlAgent:
 
+    # initialise agent
+
     def __init__(
         self,
         confidence_level: float, # a parameter
@@ -61,13 +63,12 @@ class PeUcrlAgent:
 
         # initialise behaviour policy
         self.initial_policy = initial_policy
-        self.behaviour_policy = deepcopy(self.initial_policy) # using some kind of conversion?
-        self.target_policy = deepcopy(self.initial_policy) #np.zeros((self.n_cells, self.n_states), dtype=int)
+        self.behaviour_policy = deepcopy(self.initial_policy)
+        self.target_policy = deepcopy(self.initial_policy)
         self.policy_update = np.zeros(self.n_cells, dtype=int)
 
-        # initialise counts to 0
+        # initialise counts to 0 or 1
         self.time_step = 0
-        #self.current_episode_time_step = 0 # do I need this?
         self.current_episode_count = np.zeros((self.n_states, self.n_actions), dtype=int)
         self.previous_episodes_count = np.zeros((self.n_states, self.n_actions), dtype=int)
         self.cellular_current_episode_count = np.zeros((self.n_states, self.n_actions), dtype=int)
@@ -92,63 +93,10 @@ class PeUcrlAgent:
 
         self.n_policy_changes = 0
 
-        # initialise prism
-        system("cd agents/prism; rm -f constraints.props; touch constraints.props")
-        props_file = open('agents/prism/constraints.props', 'a')
-        props_file.write(self.regulatory_constraints)
-        props_file.close()
-        #system("rm -f agents/prism/constraints.props")
-        #system("cp " + self.regulatory_constraints + " agents/prism/constraints.props")
+        self._write_prism_files()
 
-        system('rm -f agents/prism/model.prism')
-        system("touch agents/prism/model.prism")
-        prism_file = open('agents/prism/model.prism', 'a')
 
-        prism_file.write('dtmc\n\n')
-
-        for flat_state in range(self.n_intracellular_states):
-            prism_file.write('const int C_' + str(flat_state) + ';\n')
-        prism_file.write('\n')
-        
-        for cell in range(self.n_cells):
-
-            prism_file.write('const int sinit' + str(cell) + ';\n')
-            prism_file.write('const int cinit' + str(cell) + ';\n')
-            prism_file.write('const int piupdate' + str(cell) + ';\n\n')
-
-            for flat_state in range(self.n_intracellular_states):
-                for flat_next_state in range(self.n_intracellular_states-1):
-                    prism_file.write('const double p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ';\n')
-                prism_file.write('const double p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states-1) + ' = 1')
-                for flat_next_state in range(self.n_intracellular_states-1):
-                    prism_file.write(' - p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state))
-                prism_file.write(';\n\n')
-            
-            prism_file.write('module cell' + str(cell) + '\n\n')
-
-            prism_file.write('s' + str(cell) + ' : [0..' + str(self.n_intracellular_states) + '] init sinit' + str(cell) + ';\n')
-            prism_file.write('c' + str(cell) + ' : [0..1] init cinit' + str(cell) + ';\n\n')
-
-            for flat_state in range(self.n_intracellular_states):
-                prism_file.write("[] s" + str(cell) + "=" + str(flat_state) + " -> ")
-                for flat_next_state in range(self.n_intracellular_states - 1):
-                    prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ":(s" + str(cell) + "'=" + str(flat_next_state) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(flat_next_state) + ")) + ")
-                prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states - 1) + ":(s" + str(cell) + "'=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(self.n_intracellular_states - 1) + "));\n")
-            
-            prism_file.write("\nendmodule\n\n")
-
-        prism_file.write("formula n = ")
-        for cell in range(self.n_cells):
-            prism_file.write("c" + str(cell) + " + ")
-        prism_file.write("0;\n")
-        for count, cell_class in enumerate(self.cell_classes):
-            prism_file.write("formula n_" + cell_class + " = ")
-            for cell in self.cell_labelling_function[count]:
-                prism_file.write("c" + str(cell) + " + ")
-            prism_file.write("0;\n")
-
-        prism_file.close()
-
+    # subroutines the user must call to run the agent
 
     def sample_action(
         self,
@@ -161,10 +109,11 @@ class PeUcrlAgent:
         self.action_sampled = True
 
         # update state, action
-        self.previous_state = self.cellular_encoding(previous_state) # dict
-        self.flat_previous_state = self._flatten(state=self.previous_state)
+        self.previous_state = self.cellular_encoding(previous_state)
+        self.flat_previous_state = cellular2tabular(self.previous_state, self.n_intracellular_states, self.n_cells)
         self.cellular_action = deepcopy(self.behaviour_policy[:, self.flat_previous_state])
         self.action = self.cellular_decoding(self.cellular_action)
+        self.flat_action = cellular2tabular(self.action, self.n_intracellular_actions, self.n_cells)
         return self.action
 
 
@@ -182,9 +131,8 @@ class PeUcrlAgent:
         self.start_time_step = perf_counter_ns()
 
         self.action_sampled = False
-        self.current_state = self.cellular_encoding(deepcopy(current_state)) # dict
-        self.flat_action = self._flatten(action=self.action)
-        self.flat_current_state = self._flatten(state=self.current_state)
+        self.current_state = self.cellular_encoding(deepcopy(current_state))
+        self.flat_current_state = cellular2tabular(self.current_state, self.n_intracellular_states, self.n_cells)
         self.reward = reward
         if side_effects is None:
             print("Warning: No side effects providing, assuming silence")
@@ -192,14 +140,16 @@ class PeUcrlAgent:
         self.side_effects = side_effects
 
         # on-policy
+        self._update_estimates()
         self._side_effects_processing()
         new_pruning = self._action_pruning()
         self._update_current_episode_counts() # moved below. Correct?
         self.time_step += 1
 
         # off-policy
-        next_action = deepcopy(self.behaviour_policy[:, self._flatten(state=self.current_state)])
-        new_episode = (self.current_episode_count[self._flatten(state=self.current_state), self._flatten(action=next_action)] >= max([1, self.previous_episodes_count[self._flatten(state=self.current_state), self._flatten(action=next_action)]]))
+        next_action = deepcopy(self.behaviour_policy[:, self.flat_current_state])
+        flat_next_action = cellular2tabular(next_action, self.n_intracellular_actions, self.n_cells)
+        new_episode = (self.current_episode_count[self.flat_current_state, flat_next_action] >= max([1, self.previous_episodes_count[self.flat_current_state, flat_next_action]]))
         
         self.end_time_step = perf_counter_ns()
         self.start_episode = np.nan
@@ -209,7 +159,7 @@ class PeUcrlAgent:
 
             self.start_episode = perf_counter_ns()
 
-            self._update_confidence_sets()
+            self._update_errors()
             self._planner()
             self._pe_shield()
 
@@ -219,13 +169,18 @@ class PeUcrlAgent:
 
             self.end_episode = perf_counter_ns()
 
-    # subroutines
+    
+    # subroutines the user can call to collect data
 
     def get_ns_between_time_steps(self):
         return self.end_time_step - self.start_time_step
     
     def get_ns_between_episodes(self):
         return self.end_episode - self.start_episode
+    
+    
+    # subroutines for procedure
+    ## on-policy
 
     def _update_current_episode_counts(self):
 
@@ -239,8 +194,8 @@ class PeUcrlAgent:
                 self.cellular_current_episode_count[flat_previous_state, flat_action] = np.amin(
                     [
                         [
-                            self.intracellular_episode_count[intracellular_state, intracellular_action] for intracellular_state in self._unflatten(flat_state=flat_previous_state)
-                        ] for intracellular_action in self._unflatten(flat_action=flat_action)
+                            self.intracellular_episode_count[intracellular_state, intracellular_action] for intracellular_state in tabular2cellular(flat_previous_state, self.n_intracellular_states, self.n_cells)
+                        ] for intracellular_action in tabular2cellular(flat_action, self.n_intracellular_actions, self.n_cells)
                     ]
                 )
 
@@ -302,25 +257,45 @@ class PeUcrlAgent:
                             break
         
         return new_pruning
+    
 
+    def _update_estimates(self):
 
-    def _update_confidence_sets(self):
-
-        # update transition count
+         # update transition count
         for cell in range(self.n_cells):
             self.intracellular_sum[self.previous_state[cell], self.action[cell]] += 1
             self.intracellular_transition_sum[self.previous_state[cell], self.action[cell], self.current_state[cell]] += 1
 
         # update estimates
-        for cell in range(self.n_cells):
-            self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]] = self.intracellular_transition_sum[self.previous_state[cell], self.action[cell], self.current_state[cell]] / max([1, self.intracellular_sum[self.previous_state[cell], self.action[cell]]])
+        #for cell in range(self.n_cells):
+        #    self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]] = #self.intracellular_transition_sum[self.previous_state[cell], self.action[cell], self.current_state[cell]] / max([1, self.intracellular_sum[self.previous_state[cell], self.action[cell]]])
+
         
-        flat_previous_state = self._flatten(state=self.previous_state)
-        flat_action = self._flatten(action=self.action)
-        flat_current_state = self._flatten(state=self.current_state)
-        self.transition_estimates[flat_previous_state, flat_action, flat_current_state] = np.prod(
-            [self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]] for cell in range(self.n_cells)]
-        )
+        #self.transition_estimates[self.flat_previous_state, self.flat_action, self.flat_current_state] = 1
+        #for cell in range(self.n_cells):
+        #    self.transition_estimates[self.flat_previous_state, self.flat_action, self.flat_current_state] *= self.#intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]]
+
+    
+
+    ## off-policy
+
+    def _update_errors(self):
+
+        # update estimates
+        for intracellular_state in range(self.n_intracellular_states):
+            for intracellular_action in range(self.n_intracellular_actions):
+                self.intracellular_transition_estimates[intracellular_state, intracellular_action, :] = self.intracellular_transition_sum[intracellular_state, intracellular_action, :] / max([1, self.intracellular_sum[intracellular_state, intracellular_action]])
+
+        for flat_state in range(self.n_states):
+            for flat_action in range(self.n_actions):
+                for flat_next_state in range(self.n_states):
+                    self.transition_estimates[flat_state, flat_action, flat_next_state] = 1
+                    for (intracellular_state, intracellular_action, intracellular_next_state) in zip(
+                                tabular2cellular(flat_state, self.n_intracellular_states, self.n_cells),
+                                tabular2cellular(flat_action, self.n_intracellular_actions, self.n_cells),
+                                tabular2cellular(flat_next_state, self.n_intracellular_states, self.n_cells)
+                        ):
+                        self.transition_estimates[flat_state, flat_action, flat_next_state] *= self.intracellular_transition_estimates[intracellular_state, intracellular_action, intracellular_next_state]
 
         # update errors for state--action pairs
         for flat_state in range(self.n_states):
@@ -343,43 +318,6 @@ class PeUcrlAgent:
                         max([1, self.intracellular_episode_count[intracellular_state, intracellular_action]]) # double-check this?
                     )
                 )
-
-
-    def _flatten(
-        self,
-        state=None,
-        action=None,
-    ):
-
-        assert (state is None) ^ (action is None)
-        if type(state) is np.ndarray:
-            m = self.n_intracellular_states
-            obj = state
-        elif type(action) is np.ndarray:
-            m = self.n_intracellular_actions
-            obj = action
-        else:
-            raise ValueError('state or action must be an array')
-
-        return cellular2tabular(obj, m, self.n_cells)
-        
-    def _unflatten(
-        self,
-        flat_state=None,
-        flat_action=None,
-    ):
-
-        assert (flat_state is None) ^ (flat_action is None)
-        if type(flat_state) is int:
-            m = self.n_intracellular_states
-            obj = flat_state
-        elif type(flat_action) is int:
-            m = self.n_intracellular_actions
-            obj = flat_action
-        else:
-            raise ValueError('flat_state or flat_action must be an integer')
-
-        return tabular2cellular(obj, m, self.n_cells)
 
 
     def _inner_max(
@@ -475,12 +413,14 @@ class PeUcrlAgent:
     ):
 
         #verified = True
-        verified = self.prism_verify(tmp_policy)
+        verified = self._call_prism(tmp_policy)
 
         return verified
 
 
-    def prism_verify(
+    # using prism
+
+    def _call_prism(
         self,
         tmp_policy,
     ):
@@ -505,7 +445,7 @@ class PeUcrlAgent:
         param_arg = ''
         for cell in range(self.n_cells):
             for flat_state in range(self.n_states):
-                intracellular_state = self._unflatten(flat_state=flat_state)[cell]
+                intracellular_state = tabular2cellular(flat_state, self.n_intracellular_states, self.n_cells)[cell]
                 intracellular_action = tmp_policy[cell, flat_state]
                 adds_up = 0 # check
                 for next_intracellular_state in range(self.n_intracellular_states):
@@ -548,7 +488,64 @@ class PeUcrlAgent:
         output_file.close()
 
         return verified
+    
 
+    def _write_prism_files(self):
+
+        # initialise prism
+        system("cd agents/prism; rm -f constraints.props; touch constraints.props")
+        props_file = open('agents/prism/constraints.props', 'a')
+        props_file.write(self.regulatory_constraints)
+        props_file.close()
+
+        system('rm -f agents/prism/model.prism')
+        system("touch agents/prism/model.prism")
+        prism_file = open('agents/prism/model.prism', 'a')
+
+        prism_file.write('dtmc\n\n')
+
+        for flat_state in range(self.n_intracellular_states):
+            prism_file.write('const int C_' + str(flat_state) + ';\n')
+        prism_file.write('\n')
+        
+        for cell in range(self.n_cells):
+
+            prism_file.write('const int sinit' + str(cell) + ';\n')
+            prism_file.write('const int cinit' + str(cell) + ';\n')
+            prism_file.write('const int piupdate' + str(cell) + ';\n\n')
+
+            for flat_state in range(self.n_intracellular_states):
+                for flat_next_state in range(self.n_intracellular_states-1):
+                    prism_file.write('const double p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ';\n')
+                prism_file.write('const double p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states-1) + ' = 1')
+                for flat_next_state in range(self.n_intracellular_states-1):
+                    prism_file.write(' - p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state))
+                prism_file.write(';\n\n')
+            
+            prism_file.write('module cell' + str(cell) + '\n\n')
+
+            prism_file.write('s' + str(cell) + ' : [0..' + str(self.n_intracellular_states) + '] init sinit' + str(cell) + ';\n')
+            prism_file.write('c' + str(cell) + ' : [0..1] init cinit' + str(cell) + ';\n\n')
+
+            for flat_state in range(self.n_intracellular_states):
+                prism_file.write("[] s" + str(cell) + "=" + str(flat_state) + " -> ")
+                for flat_next_state in range(self.n_intracellular_states - 1):
+                    prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(flat_next_state) + ":(s" + str(cell) + "'=" + str(flat_next_state) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(flat_next_state) + ")) + ")
+                prism_file.write('p' + str(cell) + "_" + str(flat_state) + "_" + str(self.n_intracellular_states - 1) + ":(s" + str(cell) + "'=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(self.n_intracellular_states - 1) + "));\n")
+            
+            prism_file.write("\nendmodule\n\n")
+
+        prism_file.write("formula n = ")
+        for cell in range(self.n_cells):
+            prism_file.write("c" + str(cell) + " + ")
+        prism_file.write("0;\n")
+        for count, cell_class in enumerate(self.cell_classes):
+            prism_file.write("formula n_" + cell_class + " = ")
+            for cell in self.cell_labelling_function[count]:
+                prism_file.write("c" + str(cell) + " + ")
+            prism_file.write("0;\n")
+
+        prism_file.close()
 
 
 

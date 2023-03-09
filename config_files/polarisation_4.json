@@ -11,6 +11,6 @@
     "accuracy": 0.99,
     "cell_classes": ["children", "nonconsenting"],
     "cell_labelling_function": [[], [1]],
-    "max_time_steps": 30000,
+    "max_time_steps": 1000000,
     "reset_seed": 88
 }
