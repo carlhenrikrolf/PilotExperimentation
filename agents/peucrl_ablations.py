@@ -48,8 +48,7 @@ class PeUcrlMinusRAgent(PeUcrlAgent):
 
 
     def update(self, state, reward, side_effects):
-        flat_action = self._flatten(action=self.action)
-        self.reward_sum[self.flat_previous_state, flat_action] += reward
+        self.reward_sum[self.flat_previous_state, self.flat_action] += reward
         super().update(state, reward, side_effects)
 
     def _extended_value_iteration(self):
@@ -129,3 +128,19 @@ class PeUcrlMinusRMinusExperimentationAgent(PeUcrlMinusRAgent):
             previous_value = current_value
         self.value_function = current_value # for testing purposes
         return quality
+    
+
+
+    
+class PeUcrlMinusSafetyAgent(PeUcrlMinusShieldAgent):
+
+    def _action_pruning(self):
+        return False
+        
+
+
+        
+class PeUcrlMinusRMinusSafetyAgent(PeUcrlMinusRMinusShieldAgent):
+
+    def _action_pruning(self):
+        return False

@@ -24,6 +24,13 @@ if experiment_dir[0] != '.':
 experiment_path = 'results/' + experiment_dir
 system('mkdir ' + experiment_path)
 
+# save commits
+system('touch ' + experiment_path + 'commits.txt')
+system('printf "PilotExperimentation\n\n" >> ' + experiment_path + 'commits.txt')
+system('git log -n 1 >> ' + experiment_path + 'commits.txt')
+system('printf "\n\ngym-cellular\n\n" >> ' + experiment_path + 'commits.txt')
+system('cd ../gym-cellular; git log -n 1 >> ../PilotExperimentation/' + experiment_path + 'commits.txt')
+
 # load and copy config file
 config_file_path = 'config_files/' + config_file_name
 config_file = open(config_file_path, 'r')
@@ -55,18 +62,27 @@ if 'polarisation' in config_file_name:
         seed=config["environment_seed"],
     )
 
+
 if 'peucrl' in agent_id:
 
-    if 'minus_r_minus_shield' in agent_id:
-        from agents import PeUcrlMinusRMinusShieldAgent as Agent
-    elif 'minus_r_minus_experimentation' in agent_id:
-        from agents import PeUcrlMinusRMinusExperimentationAgent as Agent
-    elif 'minus_evi' in agent_id:
-        from agents import PeUcrlMinusEviAgent as Agent
-    elif 'minus_shield' in agent_id:
-        from agents import PeUcrlMinusShieldAgent as Agent
-    else:
+    if agent_id == 'peucrl':
         from agents import PeUcrlAgent as Agent
+    elif agent_id == 'peucrl_minus_r':
+        from agents import PeUcrlMinusRAgent as Agent
+    elif agent_id == 'peucrl_minus_r_minus_shield':
+        from agents import PeUcrlMinusRMinusShieldAgent as Agent
+    elif agent_id == 'peucrl_minus_r_minus_experimentation':
+        from agents import PeUcrlMinusRMinusExperimentationAgent as Agent
+    elif agent_id == 'peucrl_minus_r_minus_safety':
+        from agents import PeUcrlMinusRMinusSafetyAgent as Agent
+    elif agent_id == 'peucrl_minus_evi':
+        from agents import PeUcrlMinusEviAgent as Agent
+    elif agent_id == 'peucrl_minus_shield':
+        from agents import PeUcrlMinusShieldAgent as Agent
+    elif agent_id == 'peucrl_minus_safety':
+        from agents import PeUcrlMinusSafetyAgent as Agent
+    else:
+        raise ValueError('Agent not found.')
 
     # instantiate agent
     agt = Agent(
