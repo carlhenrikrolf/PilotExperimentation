@@ -90,6 +90,16 @@ class PeUcrlMinusEviAgent(PeUcrlAgent):
 
 
 
+
+class PeUcrlMinusRMinusEviAgent(PeUcrlMinusRAgent):
+
+    def _planner(self):
+        
+        self.target_policy = deepcopy(np.random.randint(0, self.n_intracellular_actions, size=(self.n_cells, self.n_states)))
+
+
+
+
 class PeUcrlMinusRMinusShieldAgent(PeUcrlMinusRAgent):
 
     def _pe_shield(self):

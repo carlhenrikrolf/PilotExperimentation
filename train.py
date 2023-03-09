@@ -77,6 +77,8 @@ if 'peucrl' in agent_id:
         from agents import PeUcrlMinusRMinusSafetyAgent as Agent
     elif agent_id == 'peucrl_minus_evi':
         from agents import PeUcrlMinusEviAgent as Agent
+    elif agent_id == 'peucrl_minus_r_minus_evi':
+        from agents import PeUcrlMinusRMinusEviAgent as Agent
     elif agent_id == 'peucrl_minus_shield':
         from agents import PeUcrlMinusShieldAgent as Agent
     elif agent_id == 'peucrl_minus_safety':
