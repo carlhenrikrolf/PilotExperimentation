@@ -88,8 +88,6 @@ class PeUcrlAgent:
         self.current_state = None
         self.action_sampled = False
 
-        self.n_policy_changes = 0
-
         self._write_prism_files()
 
 
@@ -263,14 +261,7 @@ class PeUcrlAgent:
             self.intracellular_sum[self.previous_state[cell], self.action[cell]] += 1
             self.intracellular_transition_sum[self.previous_state[cell], self.action[cell], self.current_state[cell]] += 1
 
-        # update estimates
-        #for cell in range(self.n_cells):
-        #    self.intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]] = #self.intracellular_transition_sum[self.previous_state[cell], self.action[cell], self.current_state[cell]] / max([1, self.intracellular_sum[self.previous_state[cell], self.action[cell]]])
 
-        
-        #self.transition_estimates[self.flat_previous_state, self.flat_action, self.flat_current_state] = 1
-        #for cell in range(self.n_cells):
-        #    self.transition_estimates[self.flat_previous_state, self.flat_action, self.flat_current_state] *= self.#intracellular_transition_estimates[self.previous_state[cell], self.action[cell], self.current_state[cell]]
 
     
 
@@ -368,6 +359,7 @@ class PeUcrlAgent:
             previous_value = current_value
         self.value_function = current_value # for testing purposes
         return quality
+    
 
     def _planner(self):
 
@@ -377,6 +369,7 @@ class PeUcrlAgent:
             max_flat_action = int(random.sample(max_flat_action_set, 1)[0])
             max_action = tabular2cellular(max_flat_action, self.n_intracellular_actions, self.n_cells)
             self.target_policy[:, flat_state] = deepcopy(max_action)
+
 
     def _pe_shield(self):
         
@@ -391,8 +384,6 @@ class PeUcrlAgent:
                 self.policy_update[cell] == 1
             else:
                 tmp_policy[cell, :] = deepcopy(self.behaviour_policy[cell, :])
-        if (tmp_policy != self.behaviour_policy).any():
-            self.n_policy_changes += 1
         self.behaviour_policy = deepcopy(tmp_policy)
         
 
@@ -403,6 +394,7 @@ class PeUcrlAgent:
 
         cell = random.sample(cell_set, 1)[0]
         return cell
+    
 
     def _verify(
         self,
