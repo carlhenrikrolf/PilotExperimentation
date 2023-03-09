@@ -81,21 +81,24 @@ if 'peucrl' in agent_id:
         from agents import PeUcrlMinusShieldAgent as Agent
     elif agent_id == 'peucrl_minus_safety':
         from agents import PeUcrlMinusSafetyAgent as Agent
+    elif agent_id == 'peucrl_minus_action_pruning':
+        from agents import PeUcrlMinusActionPruningAgent as Agent
+    elif agent_id == 'peucrl_minus_r_minus_action_pruning':
+        from agents import PeUcrlMinusRMinusActionPruningAgent as Agent
     else:
         raise ValueError('Agent not found.')
 
     # instantiate agent
     agt = Agent(
         confidence_level=config["confidence_level"],
-        accuracy=config["accuracy"],
         n_cells=config["n_users"],
         n_intracellular_states=config["n_user_states"] * 2,
         cellular_encoding=env.cellular_encoding,
         n_intracellular_actions=config["n_recommendations"],
         cellular_decoding=env.cellular_decoding,
         reward_function=env.tabular_reward_function,
-        cell_classes=config["cell_classes"],
-        cell_labelling_function=config["cell_labelling_function"],
+        cell_classes=env.get_cell_classes(),
+        cell_labelling_function=env.get_cell_labelling_function(),
         regulatory_constraints=config["regulatory_constraints"],
         initial_policy=env.get_initial_policy(),
         seed=config["agent_seed"],

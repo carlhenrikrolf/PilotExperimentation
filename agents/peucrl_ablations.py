@@ -10,7 +10,6 @@ class PeUcrlMinusRAgent(PeUcrlAgent):
     def __init__(
         self,
         confidence_level: float, # a parameter
-        accuracy: float, # a parameter
         n_cells: int, # prior knowledge from here and down
         n_intracellular_states: int,
         cellular_encoding, # states to N^n
@@ -29,7 +28,6 @@ class PeUcrlMinusRAgent(PeUcrlAgent):
     
         super().__init__(
             confidence_level=confidence_level,
-            accuracy=accuracy,
             n_cells=n_cells,
             n_intracellular_states=n_intracellular_states,
             cellular_encoding=cellular_encoding,
@@ -141,6 +139,22 @@ class PeUcrlMinusSafetyAgent(PeUcrlMinusShieldAgent):
 
         
 class PeUcrlMinusRMinusSafetyAgent(PeUcrlMinusRMinusShieldAgent):
+
+    def _action_pruning(self):
+        return False
+    
+
+
+
+class PeUcrlMinusActionPruningAgent(PeUcrlAgent):
+
+    def _action_pruning(self):
+        return False
+    
+
+
+
+class PeUcrlMinusRMinusActionPruningAgent(PeUcrlMinusRAgent):
 
     def _action_pruning(self):
         return False

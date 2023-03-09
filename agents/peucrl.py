@@ -18,7 +18,6 @@ class PeUcrlAgent:
     def __init__(
         self,
         confidence_level: float, # a parameter
-        accuracy: float, # a parameter
         n_cells: int,
         n_intracellular_states: int,
         cellular_encoding, # states to N^n
@@ -34,7 +33,6 @@ class PeUcrlAgent:
 
         # check correctness of inputs
         assert 0 < confidence_level < 1
-        assert 0 < accuracy
 
         # seed generators
         random.seed(seed)
@@ -42,7 +40,6 @@ class PeUcrlAgent:
 
         # point inputs to self
         self.confidence_level = confidence_level
-        self.accuracy = accuracy
         self.n_cells = n_cells
         self.n_intracellular_states = n_intracellular_states
         self.cellular_encoding = cellular_encoding
