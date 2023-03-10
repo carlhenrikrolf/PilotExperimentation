@@ -271,7 +271,7 @@ class PeUcrlAgent:
 
         # basic case
         for cell in range(self.n_cells):
-            if 'unsafe' in self.side_effects_functions[self.current_state[cell]]:
+            if {'unsafe'} == self.side_effects_functions[self.current_state[cell]]:
                 if self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]] == 1:
                     new_pruning = True
                 self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]] = 0
@@ -286,7 +286,7 @@ class PeUcrlAgent:
                 self.path[cell] = set()
             elif n_unpruned_actions == 1:
                 self.path[cell].add((self.previous_state[cell], self.action[cell]))
-            if ('unsafe' in self.side_effects_functions[self.current_state[cell]]) or n_unpruned_actions == 0:
+            if ({'unsafe'} == self.side_effects_functions[self.current_state[cell]]) or n_unpruned_actions == 0:
                 for (intracellular_state, intracellular_action) in self.path[cell]:
                     if self.intracellular_transition_indicators[intracellular_state, intracellular_action] == 1:
                         new_pruning = True
@@ -442,7 +442,7 @@ class PeUcrlAgent:
         cell_set: set,
     ):
 
-        cell = random.sample(cell_set, 1)[0]
+        cell = int(random.sample(cell_set, 1)[0])
         return cell
     
 

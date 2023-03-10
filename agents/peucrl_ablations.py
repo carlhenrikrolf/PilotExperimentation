@@ -98,20 +98,6 @@ class PeUcrlMinusRMinusEviAgent(PeUcrlMinusRAgent):
         self.target_policy = deepcopy(np.random.randint(0, self.n_intracellular_actions, size=(self.n_cells, self.n_states)))
 
 
-    #temporary
-    def _pe_shield(self):
-    
-        tmp_policy = deepcopy(self.behaviour_policy)
-        for cell in range(self.n_cells):
-            tmp_policy[cell, :] = deepcopy(self.target_policy[cell, :])
-            verified = self._verify(tmp_policy)
-            if verified:
-                self.policy_update[cell] = 1
-            else:
-                tmp_policy[cell, :] = deepcopy(self.behaviour_policy[cell, :])
-        self.behaviour_policy = deepcopy(tmp_policy)
-
-
 
 
 class PeUcrlMinusRMinusShieldAgent(PeUcrlMinusRAgent):
