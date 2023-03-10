@@ -1,0 +1,74 @@
+PRISM
+=====
+
+Version: 4.7
+Date: Fri Mar 10 12:50:19 GMT 2023
+Hostname: pascal
+Memory limits: cudd=1g, java(heap)=1g
+Command line: prism model.prism constraints.props -const p=0
+
+Parsing model file "model.prism"...
+
+Type:        DTMC
+Modules:     cell1 cell2 
+Variables:   s0 c0 s1 c1 
+
+Parsing properties file "constraints.props"...
+
+2 properties:
+(1) P>=0.5 [ G n<=0 ]
+(2) P>=0.5 [ G n<=1 ]
+
+---------------------------------------------------------------------
+
+Model checking: P>=0.5 [ G n<=0 ]
+Model constants: p=0
+
+Building model...
+Model constants: p=0
+
+Warning: Update 2 of command 1 of module "cell1" doesn't do anything ("(s0'=1) & (c0'=1)", line 6, column 44)
+
+Warning: Update 2 of command 2 of module "cell1" doesn't do anything ("(s0'=1) & (c0'=1)", line 7, column 44)
+
+Warning: Update 2 of command 1 of module "cell2" doesn't do anything ("(s1'=1) & (c1'=1)", line 15, column 44)
+
+Warning: Update 2 of command 2 of module "cell2" doesn't do anything ("(s1'=1) & (c1'=1)", line 16, column 44)
+
+Computing reachable states...
+
+Reachability (BFS): 1 iterations in 0.00 seconds (average 0.001000, setup 0.00)
+
+Time for model construction: 0.014 seconds.
+
+Type:        DTMC
+States:      1 (1 initial)
+Transitions: 1
+
+Transition matrix: 10 nodes (2 terminal), 1 minterms, vars: 4r/4c
+
+yes = 0, no = 1, maybe = 0
+
+Property satisfied in 1 of 1 initial states.
+
+Time for model checking: 0.003 seconds.
+
+Result: true
+
+---------------------------------------------------------------------
+
+Model checking: P>=0.5 [ G n<=1 ]
+Model constants: p=0
+
+yes = 0, no = 1, maybe = 0
+
+Property satisfied in 1 of 1 initial states.
+
+Time for model checking: 0.0 seconds.
+
+Result: true
+
+---------------------------------------------------------------------
+
+Note: There were 4 warnings during computation.
+
