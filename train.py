@@ -11,6 +11,8 @@ from os import system
 from pprint import pprint
 from sys import argv, stdout
 
+from agents.utils import cellular2tabular
+
 # take arguments
 agent_id = argv[1]
 config_file_name = argv[2]
@@ -122,6 +124,7 @@ data_file.close()
 for time_step in range(config["max_time_steps"]):
 
     action = agt.sample_action(state)
+    R = env.tabular_reward_function(cellular2tabular(env.cellular_encoding(state), agt.n_intracellular_states, agt.n_cells), cellular2tabular(action, agt.n_intracellular_actions, agt.n_cells))
     state, reward, terminated, truncated, info = env.step(action)
     agt.update(state, reward, info["side_effects"])
 
@@ -147,5 +150,7 @@ for time_step in range(config["max_time_steps"]):
         else:
             stdout.write('\033[3K')
             print("time step:", time_step + 1, end='\r')
+    
+    assert  R == reward
 
 print('\nTRAINING ENDED\n')
