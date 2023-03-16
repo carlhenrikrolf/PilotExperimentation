@@ -10,6 +10,7 @@ from json import load, dumps
 from os import system
 from pprint import pprint
 from sys import argv, stdout
+from time import sleep
 
 # take arguments
 agent_id = argv[1]
@@ -118,6 +119,9 @@ system('touch ' + experiment_path + 'data.csv')
 data_file = open(experiment_path + 'data.csv', 'a')
 data_file.write('time_step,reward,side_effects_incidence,ns_between_time_steps,ns_between_episodes')
 data_file.close()
+
+# debugger
+sleep(5) # for having time to attach
 
 for time_step in range(config["max_time_steps"]):
 
