@@ -63,8 +63,8 @@ class PeUcrlAgent:
         self.initial_policy = initial_policy
         self.behaviour_policy = deepcopy(self.initial_policy)
         self.target_policy = deepcopy(self.initial_policy)
-        self.policy_update = np.zeros(self.n_cells, dtype=int) + 1 #test
-        self.policy_update[0] = 0 #test
+        self.policy_update = np.zeros(self.n_cells, dtype=int) #+ 1 #test
+        #self.policy_update[0] = 0 #test
 
         # initialise counts to 0 or 1
         self.time_step = 0
@@ -378,8 +378,7 @@ class PeUcrlAgent:
             tmp_policy[cell, :] = deepcopy(self.target_policy[cell, :])
             verified = self._verify(tmp_policy)
             if verified:
-                #test self.policy_update[cell] = 1
-                pass
+                self.policy_update[cell] = 1
             else:
                 tmp_policy[cell, :] = deepcopy(self.behaviour_policy[cell, :])
         self.behaviour_policy = deepcopy(tmp_policy)

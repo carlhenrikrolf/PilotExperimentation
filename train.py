@@ -10,6 +10,7 @@ from json import load, dumps
 from os import system
 from pprint import pprint
 from sys import argv, stdout
+from time import sleep
 
 from agents.utils import cellular2tabular
 
@@ -47,6 +48,9 @@ new_config_file.close()
 print('\nSTARTED TRAINING \n')
 print('configurations:')
 pprint(config)
+
+# debugger
+sleep(5) # get time to attach debugger
 
 # instantiate polarisation
 if 'polarisation' in config_file_name:
