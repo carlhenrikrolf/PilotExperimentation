@@ -1,15 +1,14 @@
-#from prism import verify
-import numpy as np
-import random
-from itertools import chain
-from time import perf_counter_ns
-import math
 from agents.utils.space_transformations import cellular2tabular, tabular2cellular
-from os import system
+
 from copy import deepcopy, copy
+from itertools import chain
+import math
+import numpy as np
+from os import system
 from pprint import pprint
-
-
+import random
+from subprocess import check_output
+from time import perf_counter_ns
 
 class PeUcrlAgent:
 
@@ -509,7 +508,11 @@ class PeUcrlAgent:
         system('rm -f agents/prism/output.txt')
         system('touch agents/prism/output.txt')
         #system('cd agents/prism; co=$(< const.txt); pa=$(< param.txt); prism model.prism constraints.props -const $co -param $pa &>> output.txt 2>&1')
-        system('cd agents/prism; prism model.prism constraints.props -const ' + const_arg[:-1] + ' -param ' + param_arg[:-1] + ' >> output.txt 2>&1')
+        #system('cd agents/prism; prism model.prism constraints.props -const ' + const_arg[:-1] + ' -param ' + param_arg[:-1] + ' >> output.txt 2>&1')
+        output = check_output(['prism', 'agents/prism/model.prism', 'agents/prism/constraints.props', '-const', const_arg[:-1], '-param', param_arg[:-1]]).decode()
+        output_file = open('agents/prism/output.txt', 'w')
+        output_file.write(output)
+        output_file.close()
         output_file = open('agents/prism/output.txt', 'r')
         line_set = output_file.readlines()
         occurances = 0
