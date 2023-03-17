@@ -1,0 +1,8 @@
+python3 train.py peucrl_minus_r polarisation_11.json juju_peucrl_1
+python3 train.py peucrl_minus_r_minus_shield polarisation_11.json juju_peucrl_minus_shield_1
+python3 train.py peucrl_minus_r_minus_action_pruning polarisation_11.json juju_peucrl_minus_action_pruning_1
+
+python3 train.py peucrl_minus_r_minus_safety polarisation_12.json juju_peucrl_minus_safety_2
+python3 train.py peucrl_minus_r polarisation_12.json juju_peucrl_2
+python3 train.py peucrl_minus_r_minus_shield polarisation_12.json juju_peucrl_minus_shield_2
+python3 train.py peucrl_minus_r_minus_action_pruning polarisation_12.json juju_peucrl_minus_action_pruning_2

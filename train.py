@@ -12,6 +12,8 @@ from pprint import pprint
 from sys import argv, stdout
 from time import sleep
 
+from agents.utils import cellular2tabular
+
 # take arguments
 agent_id = argv[1]
 config_file_name = argv[2]
@@ -46,6 +48,9 @@ new_config_file.close()
 print('\nSTARTED TRAINING \n')
 print('configurations:')
 pprint(config)
+
+# debugger
+sleep(5) # get time to attach debugger
 
 # instantiate polarisation
 if 'polarisation' in config_file_name:
@@ -126,6 +131,7 @@ sleep(5) # for having time to attach
 for time_step in range(config["max_time_steps"]):
 
     action = agt.sample_action(state)
+    R = env.tabular_reward_function(cellular2tabular(env.cellular_encoding(state), agt.n_intracellular_states, agt.n_cells), cellular2tabular(action, agt.n_intracellular_actions, agt.n_cells))
     state, reward, terminated, truncated, info = env.step(action)
     agt.update(state, reward, info["side_effects"])
 
@@ -151,5 +157,7 @@ for time_step in range(config["max_time_steps"]):
         else:
             stdout.write('\033[3K')
             print("time step:", time_step + 1, end='\r')
+    
+    assert  R == reward
 
 print('\nTRAINING ENDED\n')
