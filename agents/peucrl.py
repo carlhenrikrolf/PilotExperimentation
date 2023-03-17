@@ -8,6 +8,7 @@ from os import system
 from pprint import pprint
 import random
 from subprocess import check_output
+from time import perf_counter_ns
 
 
 
