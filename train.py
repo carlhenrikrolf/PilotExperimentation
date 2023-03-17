@@ -8,6 +8,7 @@ render = False
 import gymnasium as gym
 from json import load, dumps
 from os import system
+import pickle
 from pprint import pprint
 from sys import argv, stdout
 from time import sleep
@@ -159,5 +160,10 @@ for time_step in range(config["max_time_steps"]):
             print("time step:", time_step + 1, end='\r')
     
     assert  R == reward
+
+    # save agent
+    agt_file = open(experiment_path + 'agt.pkl', 'wb')
+    pickle.dump(agt, agt_file)
+    agt_file.close()
 
 print('\nTRAINING ENDED\n')
