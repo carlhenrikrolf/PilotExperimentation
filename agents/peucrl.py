@@ -6,6 +6,7 @@ import math
 import numpy as np
 from os import system
 from pprint import pprint
+from psutil import Process
 import random
 from subprocess import check_output
 from time import perf_counter_ns
@@ -63,8 +64,7 @@ class PeUcrlAgent:
         self.initial_policy = initial_policy
         self.behaviour_policy = deepcopy(self.initial_policy)
         self.target_policy = deepcopy(self.initial_policy)
-        self.policy_update = np.zeros(self.n_cells, dtype=int) #+ 1 #test
-        #self.policy_update[0] = 0 #test
+        self.policy_update = np.zeros(self.n_cells, dtype=int)
 
         # initialise counts to 0 or 1
         self.time_step = 0
@@ -89,6 +89,7 @@ class PeUcrlAgent:
         self.previous_state = None
         self.current_state = None
         self.action_sampled = False
+        self.cpu_id = Process().cpu_num() # xprmntl
 
         # initialise prism
         self._write_prism_files()
@@ -376,11 +377,12 @@ class PeUcrlAgent:
             cell = self._cell_prioritisation(cell_set)
             cell_set -= {cell}
             tmp_policy[cell, :] = deepcopy(self.target_policy[cell, :])
+            self.policy_update[cell] = 1
             verified = self._verify(tmp_policy)
-            if verified:
-                self.policy_update[cell] = 1
-            else:
+            if not verified:
                 tmp_policy[cell, :] = deepcopy(self.behaviour_policy[cell, :])
+                if (self.behaviour_policy[cell,:] == self.initial_policy[cell,:]).all():
+                    self.policy_update[cell] = 0
         self.behaviour_policy = deepcopy(tmp_policy)
         
 
@@ -399,8 +401,7 @@ class PeUcrlAgent:
     ):
 
         #verified = True
-        #verified = self._call_prism(tmp_policy)
-        verified = (tmp_policy[1:,:] == self.behaviour_policy[1:,:]).all()
+        verified = self._call_prism(tmp_policy)
 
         return verified
 
@@ -422,11 +423,7 @@ class PeUcrlAgent:
             unsafety = int('unsafe' in self.side_effects_functions[self.current_state[cell]])
             const_arg += 'cinit' + str(cell) + '=' + str(unsafety*self.policy_update[cell]) + ','
             const_arg += 'piupdate' + str(cell) + '=' + str(self.policy_update[cell]) + ','
-        system('rm -f agents/prism/const.txt')
-        system('touch agents/prism/const.txt')
-        const_file = open('agents/prism/const.txt', 'w')
-        const_file.write(const_arg[:-1])
-        const_file.close()
+        self.const_arg = const_arg[:-1] # for debugging purposes
 
         # write parameters argument, note that the current version of prism can only import this via commandline
         param_arg = ''
@@ -447,36 +444,23 @@ class PeUcrlAgent:
                     param_arg += 'p' + str(cell) + '_' + str(intracellular_state) + '_' + str(next_intracellular_state) + '=' + str(lb) + ':' + str(ub) + ','
                     adds_up += ub # check
                 assert adds_up >= 1
-        system('rm -f agents/prism/param.txt')
-        system('touch agents/prism/param.txt')
-        param_file = open('agents/prism/param.txt', 'w')
-        param_file.write(param_arg[:-1])
-        param_file.close()
+        self.param_arg = param_arg[:-1] # for debugging purposes
         
         # perform verification
-        system('rm -f agents/prism/output.txt')
-        system('touch agents/prism/output.txt')
-        #system('cd agents/prism; co=$(< const.txt); pa=$(< param.txt); prism model.prism constraints.props -const $co -param $pa &>> output.txt 2>&1')
-        #system('cd agents/prism; prism model.prism constraints.props -const ' + const_arg[:-1] + ' -param ' + param_arg[:-1] + ' > output.txt')
-        output = check_output(['prism', 'agents/prism/model.prism', 'agents/prism/constraints.props', '-const', const_arg[:-1], '-param', param_arg[:-1]]).decode()
-        output_file = open('agents/prism/output.txt', 'w')
-        output_file.write(output)
-        output_file.close()
-        output_file = open('agents/prism/output.txt', 'r')
-        line_set = output_file.readlines()
+        output = check_output(['prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props', '-const', const_arg[:-1], '-param', param_arg[:-1]]).decode()
         occurances = 0
-        for line in reversed(line_set):
+        for line in output.splitlines():
             if 'Result:' in line:
                 occurances += 1
-                if 'true' in line and not 'false' in line:
+                if 'true' in line:
                     verified = True
-                elif 'false' in line and not 'true' in line:
+                elif 'false' in line:
                     verified = False
                 else:
                     raise ValueError('Verification returned non-Boolean result.')
         if occurances != 1:
-                raise ValueError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
-        output_file.close()
+            raise ValueError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
+        self.prism_output = output # for debugging purposes
 
         return verified
     
@@ -484,56 +468,56 @@ class PeUcrlAgent:
     
     def _write_prism_files(self):
 
-        system("cd agents/prism; rm -f constraints.props; touch constraints.props")
-        props_file = open('agents/prism/constraints.props', 'a')
-        props_file.write(self.regulatory_constraints)
-        props_file.close()
+        try:
+            system('mkdir agents/.prism_files')
+        finally:
+            self.prism_path = 'agents/.prism_files/cpu_' + str(self.cpu_id) + '/'
+            system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
 
-        system('rm -f agents/prism/model.prism')
-        system("touch agents/prism/model.prism")
-        prism_file = open('agents/prism/model.prism', 'a')
+        with open(self.prism_path + 'constraints.props', 'a') as props_file:
+            props_file.write(self.regulatory_constraints)
 
-        prism_file.write('dtmc\n\n')
+        with open(self.prism_path + 'model.prism', 'a') as prism_file:
 
-        for intracellular_state in range(self.n_intracellular_states):
-            prism_file.write('const int C_' + str(intracellular_state) + ';\n')
-        prism_file.write('\n')
+            prism_file.write('dtmc\n\n')
+
+            for intracellular_state in range(self.n_intracellular_states):
+                prism_file.write('const int C_' + str(intracellular_state) + ';\n')
+            prism_file.write('\n')
         
-        for cell in range(self.n_cells):
+            for cell in range(self.n_cells):
 
-            prism_file.write('const int sinit' + str(cell) + ';\n')
-            prism_file.write('const int cinit' + str(cell) + ';\n')
-            prism_file.write('const int piupdate' + str(cell) + ';\n\n')
+                prism_file.write('const int sinit' + str(cell) + ';\n')
+                prism_file.write('const int cinit' + str(cell) + ';\n')
+                prism_file.write('const int piupdate' + str(cell) + ';\n\n')
 
-            for intracellular_state in range(self.n_intracellular_states):
-                for next_intracellular_state in range(self.n_intracellular_states-1):
-                    prism_file.write('const double p' + str(cell) + "_" + str(intracellular_state) + "_" + str(next_intracellular_state) + ';\n')
-                prism_file.write('const double p' + str(cell) + "_" + str(intracellular_state) + "_" + str(self.n_intracellular_states-1) + ' = 1')
-                for next_intracellular_state in range(self.n_intracellular_states-1):
-                    prism_file.write(' - p' + str(cell) + "_" + str(intracellular_state) + "_" + str(next_intracellular_state))
-                prism_file.write(';\n\n')
+                for intracellular_state in range(self.n_intracellular_states):
+                    for next_intracellular_state in range(self.n_intracellular_states-1):
+                        prism_file.write('const double p' + str(cell) + "_" + str(intracellular_state) + "_" + str(next_intracellular_state) + ';\n')
+                    prism_file.write('const double p' + str(cell) + "_" + str(intracellular_state) + "_" + str(self.n_intracellular_states-1) + ' = 1')
+                    for next_intracellular_state in range(self.n_intracellular_states-1):
+                        prism_file.write(' - p' + str(cell) + "_" + str(intracellular_state) + "_" + str(next_intracellular_state))
+                    prism_file.write(';\n\n')
             
-            prism_file.write('module cell' + str(cell) + '\n\n')
+                prism_file.write('module cell' + str(cell) + '\n\n')
 
-            prism_file.write('s' + str(cell) + ' : [0..' + str(self.n_intracellular_states) + '] init sinit' + str(cell) + ';\n')
-            prism_file.write('c' + str(cell) + ' : [0..1] init cinit' + str(cell) + ';\n\n')
+                prism_file.write('s' + str(cell) + ' : [0..' + str(self.n_intracellular_states) + '] init sinit' + str(cell) + ';\n')
+                prism_file.write('c' + str(cell) + ' : [0..1] init cinit' + str(cell) + ';\n\n')
 
-            for intracellular_state in range(self.n_intracellular_states):
-                prism_file.write("[] s" + str(cell) + "=" + str(intracellular_state) + " -> ")
-                for next_intracellular_state in range(self.n_intracellular_states - 1):
-                    prism_file.write('p' + str(cell) + "_" + str(intracellular_state) + "_" + str(next_intracellular_state) + ":(s" + str(cell) + "'=" + str(next_intracellular_state) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(next_intracellular_state) + ")) + ")
-                prism_file.write('p' + str(cell) + "_" + str(intracellular_state) + "_" + str(self.n_intracellular_states - 1) + ":(s" + str(cell) + "'=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(self.n_intracellular_states - 1) + "));\n")
+                for intracellular_state in range(self.n_intracellular_states):
+                    prism_file.write("[] s" + str(cell) + "=" + str(intracellular_state) + " -> ")
+                    for next_intracellular_state in range(self.n_intracellular_states - 1):
+                        prism_file.write('p' + str(cell) + "_" + str(intracellular_state) + "_" + str(next_intracellular_state) + ":(s" + str(cell) + "'=" + str(next_intracellular_state) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(next_intracellular_state) + ")) + ")
+                    prism_file.write('p' + str(cell) + "_" + str(intracellular_state) + "_" + str(self.n_intracellular_states - 1) + ":(s" + str(cell) + "'=" + str(self.n_intracellular_states - 1) + ") & (c" + str(cell) + "'=(piupdate" + str(cell) + "*C_" + str(self.n_intracellular_states - 1) + "));\n")
             
-            prism_file.write("\nendmodule\n\n")
+                prism_file.write("\nendmodule\n\n")
 
-        prism_file.write("formula n = ")
-        for cell in range(self.n_cells):
-            prism_file.write("c" + str(cell) + " + ")
-        prism_file.write("0;\n")
-        for count, cell_class in enumerate(self.cell_classes):
-            prism_file.write("formula n_" + cell_class + " = ")
-            for cell in self.cell_labelling_function[count]:
+            prism_file.write("formula n = ")
+            for cell in range(self.n_cells):
                 prism_file.write("c" + str(cell) + " + ")
             prism_file.write("0;\n")
-
-        prism_file.close()
+            for count, cell_class in enumerate(self.cell_classes):
+                prism_file.write("formula n_" + cell_class + " = ")
+                for cell in self.cell_labelling_function[count]:
+                    prism_file.write("c" + str(cell) + " + ")
+                prism_file.write("0;\n")

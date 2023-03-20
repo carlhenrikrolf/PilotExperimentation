@@ -37,15 +37,12 @@ system('cd ../gym-cellular; git log -n 1 >> ../PilotExperimentation/' + experime
 
 # load and copy config file
 config_file_path = 'config_files/' + config_file_name
-config_file = open(config_file_path, 'r')
-config = load(config_file)
-config_file.close()
+with open(config_file_path, 'r') as config_file:
+    config = load(config_file)
 config['agent'] = agent_id
-system('touch ' + experiment_path + config_file_name)
-new_config_file = open(experiment_path + config_file_name, 'w')
-new_config_file.write(dumps(config, indent=4))
-new_config_file.close()
-#system('cp ' + config_file_path + ' ' + experiment_path)
+with open(experiment_path + config_file_name, 'w') as new_config_file:
+    new_config_file.write(dumps(config, indent=4))
+
 print('\nSTARTED TRAINING \n')
 print('configurations:')
 pprint(config)
@@ -121,10 +118,8 @@ state, info = env.reset()
 print("state:", state)
 print("time step:", 0, "\n")
 
-system('touch ' + experiment_path + 'data.csv')
-data_file = open(experiment_path + 'data.csv', 'a')
-data_file.write('time_step,reward,side_effects_incidence,ns_between_time_steps,ns_between_episodes')
-data_file.close()
+with open(experiment_path + 'data.csv', 'a') as data_file:
+    data_file.write('time_step,reward,side_effects_incidence,ns_between_time_steps,ns_between_episodes')
 
 # debugger
 sleep(5) # for having time to attach
@@ -162,8 +157,7 @@ for time_step in range(config["max_time_steps"]):
     assert  R == reward
 
     # save agent
-    agt_file = open(experiment_path + 'agt.pkl', 'wb')
-    pickle.dump(agt, agt_file)
-    agt_file.close()
+    with open(experiment_path + 'agt.pkl', 'wb') as agt_file:
+        pickle.dump(agt, agt_file)
 
 print('\nTRAINING ENDED\n')
