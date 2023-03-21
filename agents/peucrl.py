@@ -377,11 +377,15 @@ class PeUcrlAgent:
             cell = self._cell_prioritisation(cell_set)
             cell_set -= {cell}
             tmp_policy[cell, :] = deepcopy(self.target_policy[cell, :])
-            self.policy_update[cell] = 1
+            if self.policy_update[cell] == 0:
+                initial_policy_is_updated = True
+                self.policy_update[cell] = 1
+            else:
+                initial_policy_is_updated = False
             verified = self._verify(tmp_policy)
             if not verified:
                 tmp_policy[cell, :] = deepcopy(self.behaviour_policy[cell, :])
-                if (self.behaviour_policy[cell,:] == self.initial_policy[cell,:]).all():
+                if initial_policy_is_updated:
                     self.policy_update[cell] = 0
         self.behaviour_policy = deepcopy(tmp_policy)
         
