@@ -92,7 +92,11 @@ class PeUcrlAgent:
         self.cpu_id = Process().cpu_num() # xprmntl
 
         # initialise prism
-        self._write_prism_files()
+        self.prism_path = 'agents/prism_files/cpu_' + str(self.cpu_id) + '/'
+        system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
+        with open(self.prism_path + 'constraints.props', 'a') as props_file:
+            props_file.write(self.regulatory_constraints)
+        #self._write_prism_files()
 
 
     # subroutines the user must call to run the agent
@@ -402,7 +406,7 @@ class PeUcrlAgent:
         tmp_policy,
     ):
 
-        #verified = True
+        self._write_model_file(tmp_policy)
         verified = self._call_prism(tmp_policy)
 
         return verified
@@ -466,15 +470,66 @@ class PeUcrlAgent:
 
         return verified
     
+    def _write_model_file(self, tmp_policy):
+        
+        with open(self.prism_path + 'model.prism', 'a') as prism_file:
+
+            prism_file.write('dtmc\n\n')
+
+            for flat_state in range(self.n_states):
+                for cell in range(self.n_cells):
+                    C = 0
+                    if self.policy_update[cell] == 1:
+                        intracellular_states_set = tabular2cellular(flat_state, self.n_intracellular_states, self.n_cells)
+                        for intracellular_state in intracellular_states_set:
+                            if 'unsafe' in self.side_effects_functions[intracellular_state]:
+                                C = 1
+                                break
+                    prism_file.write('const int C_' + str(intracellular_state) + ' = ' + str(C) + ';\n')
+            prism_file.write('\n')
+
+            prism_file.write('module\n\n')
+
+            prism_file.write('s : [0..' + str(self.n_states) + '] init ' + str(self.flat_current_state) + ';\n')
+            for cell in range(self.n_cells):
+                prism_file.write('c_' + str(cell) + ' : [0..1] init C' + str(self.flat_current_state[cell]) + '_' + str(cell) + ';\n')
+            prism_file.write('\n')
+
+            for flat_state in range(self.n_states):
+                prism_file.write('[] s = ' + str(flat_state) + ' -> ')
+                flat_action = cellular2tabular(tmp_policy[0, flat_state], self.n_intracellular_actions, self.n_cells)
+                init_iter = True
+                for next_flat_state in range(self.n_states):
+                    lb = max(
+                        [0,
+                         self.transition_estimates[flat_state, flat_action, next_flat_state] - self.transition_errors[flat_state, flat_action]]
+                    )
+                    ub = min(
+                        [1,
+                         self.transition_estimates[flat_state, flat_action, next_flat_state] + self.transition_errors[flat_state, flat_action]]
+                    )
+                    if not init_iter:
+                        prism_file.write(' + ')
+                    prism_file.write('[' + str(lb) + ',' + str(ub) + "] : (s' = " + str(next_flat_state) + ')')
+                    for cell in range(self.n_cells):
+                        prism_file.write(' & (c_' + str(cell) + "' = C" + str(next_flat_state[cell]) + '_' + str(cell) + ')')
+                    init_iter = False
+                prism_file.write(';\n')
+            prism_file.write('\n')
+
+            prism_file.write('endmodule')
+
+
+                        
+
 
     
     def _write_prism_files(self):
 
-        try:
-            system('mkdir agents/.prism_files')
-        finally:
-            self.prism_path = 'agents/.prism_files/cpu_' + str(self.cpu_id) + '/'
-            system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
+        self.prism_path = 'agents/prism_files/cpu_' + str(self.cpu_id) + '/'
+        system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
+
+        # the above is changed
 
         with open(self.prism_path + 'constraints.props', 'a') as props_file:
             props_file.write(self.regulatory_constraints)
