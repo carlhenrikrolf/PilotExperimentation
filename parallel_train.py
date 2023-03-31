@@ -11,7 +11,7 @@ from os import system
 
 # make checks
 assert len(agent_id_set) == len(config_file_set) == len(experiment_dir_set)
-system('cd results; rm -r -f par_1; rm -r -f par_2')
+system('cd results; rm -r -f .par_1; rm -r -f .par_2')
 
 system('cd ..; pip3 install -e gym-cellular -q')
 

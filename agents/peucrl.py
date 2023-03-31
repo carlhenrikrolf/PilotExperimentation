@@ -215,7 +215,6 @@ class PeUcrlAgent:
     def _action_pruning(self):
 
         if self.time_step == 0:
-            #self.n_unpruned_actions = np.zeros(self.n_intracellular_states) + #self.n_intracellular_actions # remove
             self.intracellular_action_is_pruned = np.zeros((self.n_intracellular_states, self.n_intracellular_actions), dtype=int)
         
         new_pruning = False
@@ -226,7 +225,6 @@ class PeUcrlAgent:
                 if self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]] == 1:
                     new_pruning = True
                 self.intracellular_transition_indicators[self.previous_state[cell], self.action[cell]] = 0
-                #self.n_unpruned_actions[self.previous_state[cell]] -= 1 # WRONG! need to hav a binary array and sum over action indices
         
         # corner cases
         if self.time_step == 0:
@@ -326,10 +324,10 @@ class PeUcrlAgent:
         max_p[sorted_states[-1]] = min(
             [
                 1,
-                self.transition_estimates[flat_state,flat_action,sorted_states[-1]] + self.transition_errors[flat_state, flat_action]
+                self.transition_estimates[flat_state,flat_action,sorted_states[-1]] + self.transition_errors[flat_state, flat_action] / 2
             ]
         )
-        l = -2
+        l = 0
         while sum(max_p) > 1:
             max_p[sorted_states[l]] = max(
                 [
@@ -337,7 +335,7 @@ class PeUcrlAgent:
                     1 - sum([max_p[k] for k in chain(range(0, sorted_states[l]), range(sorted_states[l] + 1, self.n_states))])
                 ]
             )
-            l -= 1
+            l += 1
         return sum([ v * p for (v, p) in zip(value, max_p)])   
 
 
