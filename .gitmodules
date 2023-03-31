@@ -1,3 +1,4 @@
 [submodule "prism"]
 	path = prism
 	url = https://github.com/davexparker/prism.git
+	branch = imc2
