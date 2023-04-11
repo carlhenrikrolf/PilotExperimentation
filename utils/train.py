@@ -23,7 +23,6 @@ def train(
     system('mkdir ' + experiment_path)
 
     # save commits
-    system('rm -f ' + experiment_path + 'commits.txt')
     system('touch ' + experiment_path + 'commits.txt')
     system('printf "PilotExperimentation\n\n" >> ' + experiment_path + 'commits.txt')
     system('git log -n 1 >> ' + experiment_path + 'commits.txt')

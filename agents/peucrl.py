@@ -79,7 +79,6 @@ class PeUcrlAgent:
         # initialise statistics
         self.side_effects_functions = [{'safe', 'unsafe'} for _ in range(n_intracellular_states)]
         self.intracellular_transition_estimates = np.zeros((self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states))
-        self.intracellular_transition_errors = np.zeros((self.n_intracellular_states, self.n_intracellular_actions))
         self.intracellular_transition_indicators = np.ones((self.n_intracellular_states, self.n_intracellular_actions), dtype=int)
         self.transition_indicators = np.ones((self.n_states, self.n_actions), dtype=int)
         self.transition_estimates = np.zeros((self.n_states, self.n_actions, self.n_states))
@@ -244,7 +243,6 @@ class PeUcrlAgent:
                     if self.intracellular_transition_indicators[intracellular_state, intracellular_action] == 1:
                         new_pruning = True
                     self.intracellular_transition_indicators[intracellular_state, intracellular_action] = 0
-                    #self.n_unpruned_actions[intracellular_state] -= 1
 
         if new_pruning:
             for flat_state in range(self.n_states):
@@ -296,17 +294,6 @@ class PeUcrlAgent:
                         14 * self.n_states * np.log(2 * self.n_actions * self.time_step / self.confidence_level)
                     ) / (
                         max([1, self.cellular_previous_episodes_count[flat_state, flat_action]])
-                    )
-                )
-
-        # update errors for intracellular state--action pairs
-        for intracellular_state in range(self.n_intracellular_states):
-            for intracellular_action in range(self.n_intracellular_actions):
-                self.intracellular_transition_errors[intracellular_state, intracellular_action] = np.sqrt(
-                    (
-                        14 * self.n_intracellular_states * np.log(2 * self.n_intracellular_actions * self.time_step / self.confidence_level)
-                    ) / (
-                        max([1, self.intracellular_episode_count[intracellular_state, intracellular_action]]) # double-check this?
                     )
                 )
 
