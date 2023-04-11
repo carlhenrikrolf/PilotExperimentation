@@ -2,3 +2,7 @@
 	path = prism
 	url = https://github.com/davexparker/prism.git
 	branch = imc2
+[submodule "gym-cellular"]
+	path = gym-cellular
+	url = https://github.com/carlhenrikrolf/gym-cellular.git
+	branch = main

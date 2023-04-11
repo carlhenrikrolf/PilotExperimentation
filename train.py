@@ -11,7 +11,7 @@ from os import system
 from sys import argv
 from time import sleep
 
-system('cd ..; pip3 install -e gym-cellular -q')
+system('pip3 install -e gym-cellular -q')
 
 # get arguments
 agent_id = argv[1]

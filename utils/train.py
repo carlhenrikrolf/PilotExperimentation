@@ -23,11 +23,12 @@ def train(
     system('mkdir ' + experiment_path)
 
     # save commits
+    system('rm -f ' + experiment_path + 'commits.txt')
     system('touch ' + experiment_path + 'commits.txt')
     system('printf "PilotExperimentation\n\n" >> ' + experiment_path + 'commits.txt')
     system('git log -n 1 >> ' + experiment_path + 'commits.txt')
     system('printf "\n\ngym-cellular\n\n" >> ' + experiment_path + 'commits.txt')
-    system('cd ../gym-cellular; git log -n 1 >> ../PilotExperimentation/' + experiment_path + 'commits.txt')
+    system('cd gym-cellular; git log -n 1 >> ../' + experiment_path + 'commits.txt')
 
     # load and copy config file
     config_file_path = 'config_files/' + config_file_name
