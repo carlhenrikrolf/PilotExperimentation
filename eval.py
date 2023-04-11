@@ -18,8 +18,6 @@ elif len(argv) == 2:
     # define input directory
     if experiment_dir[-1] != '/':
         experiment_dir = experiment_dir + '/'
-    if experiment_dir[0] != '.':
-        experiment_dir = '.' + experiment_dir
     experiment_path = 'results/' + experiment_dir
 
     # read data
