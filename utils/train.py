@@ -69,6 +69,9 @@ def train(
             from agents import PeUcrlMinusRMinusActionPruningAgent as Agent
         else:
             raise ValueError('Agent not found.')
+    
+    elif 'ucrl2' in agent_id:
+        from agents import Ucrl2Agent as Agent
         
 
     if 'polarisation' in config_file_name:
@@ -147,7 +150,8 @@ def train(
         assert  R == reward
 
         # save agent
-        with open(experiment_path + 'agt.pkl', 'wb') as agt_file:
-            pickle.dump(agt, agt_file)
+        if time_step % 100 == 0:
+            with open(experiment_path + 'agt.pkl', 'wb') as agt_file:
+                pickle.dump(agt, agt_file)
 
     print('\nTRAINING ENDED\n')
