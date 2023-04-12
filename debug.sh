@@ -1,4 +1,4 @@
-config=polarisation_11.json
+config=polarisation_16.json
 agent=ucrl2
 
 out_dir=debug

@@ -1,11 +1,11 @@
 import numpy as np
 from typing import Sequence
 
-from gym_factored.envs.base import DiscreteEnv
+#from gym_factored.envs.base import DiscreteEnv
 
-from planners.abs_lp_optimistic import AbsOptimisticLinearProgrammingPlanner
-from util.mdp import get_mdp_functions
-from util.mdp import get_mdp_functions_partial
+from utils.alwayssafe.planners.abs_lp_optimistic import AbsOptimisticLinearProgrammingPlanner
+#from util.mdp import get_mdp_functions
+#from util.mdp import get_mdp_functions_partial
 
 np.seterr(invalid='ignore', divide='ignore')
 
@@ -96,20 +96,31 @@ class AbsOptCMDPAgent:
         )
 
     @classmethod
-    def from_discrete_env(cls, env: DiscreteEnv, features: Sequence = None, **kwargs) -> 'AbsOptCMDPAgent':
-        transition, reward, _, terminal = get_mdp_functions(env)
-        for s in np.arange(env.nS)[terminal]:
-            transition[s, :, :] = 0
-            transition[s, :, s] = 1
-            reward[s, :] = 0
-        max_reward, min_reward = reward.max(), reward.min()
-        abs_transition, abs_reward, abs_cost, abs_terminal, abs_map = get_mdp_functions_partial(env, features)
-        for s in np.arange(abs_terminal.shape[0])[abs_terminal]:
-            abs_transition[s, :, :] = 0
-            abs_transition[s, :, s] = 1
+    # def from_discrete_env(cls, env, features: Sequence = None, **kwargs) -> 'AbsOptCMDPAgent': #: DiscreteEnv, features: Sequence = None, **kwargs) -> 'AbsOptCMDPAgent':
+    #     transition, reward, _, terminal = get_mdp_functions(env)
+    #     for s in np.arange(env.nS)[terminal]:
+    #         transition[s, :, :] = 0
+    #         transition[s, :, s] = 1
+    #         reward[s, :] = 0
+    #     max_reward, min_reward = reward.max(), reward.min()
+    #     abs_transition, abs_reward, abs_cost, abs_terminal, abs_map = get_mdp_functions_partial(env, features)
+    #     for s in np.arange(abs_terminal.shape[0])[abs_terminal]:
+    #         abs_transition[s, :, :] = 0
+    #         abs_transition[s, :, s] = 1
 
-        return cls(env.nS, env.nA, terminal, env.isd, env, max_reward, min_reward,
-                   abs_transition, abs_cost, abs_terminal, abs_map, **kwargs)
+    #     return cls(env.nS, env.nA, terminal, env.isd, env, max_reward, min_reward,
+    #                abs_transition, abs_cost, abs_terminal, abs_map, **kwargs) 
+
+    def from_discrete_env(cls, env, features: Sequence = [], **kwargs) -> 'AbsOptCMDPAgent':
+
+        terminal = False
+        abs_map = np.ones([1, env.nS], dtype=int)
+        max_reward = 1.0
+        min_reward = 0.0
+        abs_cost = np.zeros([1, env.nA])
+        abs_transition = np.ones([1, env.nA, 1])
+        
+        return cls(env.nS, env.nA, terminal, env.isd, env, max_reward, min_reward, abs_transition, abs_cost, abs_map, **kwargs)
 
     def ensure_terminal_states_are_absorbing(self):
         for s in np.arange(self.ns)[self.terminal]:

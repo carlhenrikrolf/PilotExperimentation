@@ -38,9 +38,11 @@ for t in range(last_t, config['max_time_steps']): # redo last time step if incom
         data_file.write('\n' + str(t + 1) + ',' + str(reward) + ',' + str(env.get_side_effects_incidence()) + ',' + str(agt.get_ns_between_time_steps()) + ',' + str(agt.get_ns_between_episodes()))
 
     # save agent
-    if t % 100 == 0:
-        with open(experiment_path + 'agt.pkl', 'rb') as agt_file:
+    if t % 10000 == 0:
+        with open(experiment_path + '.tmp_agt.pkl', 'wb') as agt_file:
             pickle.dump(agt, agt_file)
+        system('cp -f ' + experiment_path + '.tmp_agt.pkl' + ' ' + experiment_path + 'agt.pkl')
+        system('rm -f ' + experiment_path + '.tmp_agt.pkl')
 
     stdout.write('\033[3K')
     print("time step:", t + 1, end='\r')

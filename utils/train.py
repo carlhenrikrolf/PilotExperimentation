@@ -150,8 +150,10 @@ def train(
         assert  R == reward
 
         # save agent
-        if time_step % 100 == 0:
-            with open(experiment_path + 'agt.pkl', 'wb') as agt_file:
+        if time_step % 10000 == 0:
+            with open(experiment_path + '.tmp_agt.pkl', 'wb') as agt_file:
                 pickle.dump(agt, agt_file)
+            system('cp -f ' + experiment_path + '.tmp_agt.pkl' + ' ' + experiment_path + 'agt.pkl')
+            system('rm -f ' + experiment_path + '.tmp_agt.pkl')
 
     print('\nTRAINING ENDED\n')
