@@ -165,13 +165,16 @@ class Ucrl2Agent:
         self.new_episode()
 
     # To chose an action for a given state (and start a new episode if necessary -> stopping criterion defined here).
+    def stopping_criterion(self, state, action):
+        return self.vk[state, action] >= max([1, self.Nk[state, action]])
+
     def sample_action(self, previous_state):
         state = self.cellular_encoding(previous_state)
         state = cellular2tabular(state, self.n_intracellular_states, self.n_cells)
         if self.t == 1:
             self.reset(state)
         action = categorical_sample([self.policy[state, a] for a in range(self.nA)], np.random)
-        if self.vk[state, action] >= max([1, self.Nk[state, action]]):  # Stoppping criterion
+        if self.stopping_criterion(state, action):
             self.new_episode()
             action = categorical_sample([self.policy[state, a] for a in range(self.nA)], np.random)
         self.previous_state = state

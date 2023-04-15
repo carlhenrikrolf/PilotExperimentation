@@ -11,38 +11,60 @@ class PeUcrl(Ucrl2):
 
     def __init__(
         self,
+        confidence_level,
+        n_cells,
+        n_intracellular_states,
         cellular_encoding,
+        n_intracellular_actions,
         cellular_decoding,
-        ...,
+        cell_classes,
+        cell_labelling_function,
+        regulatory_constraints,
+        initial_policy,
+        reward_function,
+        seed=0,
     ):
         
         # change name to be more inline?
-        self.n_cells = ...
-        self.n_intra_states = ...
-        self.n_intra_actions = ...
+        self.confidence_level = confidence_level
+        self.n_cells = n_cells
+        self.n_intra_states = n_intracellular_states
+        self.n_intra_actions = n_intracellular_actions
+        self.cell_classes = cell_classes
+        self.cell_labelling_function = cell_labelling_function
+        self.regulatory_constraints = regulatory_constraints
         # use tabular encoding for ucrl2
         self.cellular_encoding = cellular_encoding
         self.cellular_decoding = cellular_decoding
 
-        tabular_encoding = lambda state: cellular2tabular(cellular_encoding(state), self.n_intra_states, self.n_cells)
-        tabular_decoding = lambda action: cellular2tabular(cellular_decoding(action), ...)
+        # for cleaning later
+        #tabular_encoding = lambda state: cellular2tabular(cellular_encoding(state), self.n_intra_states, self.n_cells)
+        #tabular_decoding = lambda action: cellular2tabular(cellular_decoding(action), ...)
         
         super().__init__(
             self,
-            tabular_encoding,
-            tabular_decoding,
-            ...,
+            confidence_level=self.confidence_level,
+            n_cells=self.n_cells,
+            n_intracellular_states=self.n_intra_states,
+            cellular_encoding=self.cellular_encoding,
+            n_intracellular_actions=self.n_intra_actions,
+            cellular_decoding=self.cellular_decoding,
+            initial_policy=initial_policy, # not self
+            seed=seed, # not self
         )
 
+        self.n_states = self.nS
+        self.n_actions = self.nA
+
         # initialise arrays
-        self.intra_trans_fn = np.zeros(shape=[self.n_intra_states, self.n_intra_actions, self.n_intra_states])
-        self.intra_trans_err = np.zeros(shape=[self.n_intra_states, self.n_intra_actions, self.n_intra_states])
-        self.intra_trans_est = np.zeros(shape=[self.n_intra_states, self.n_intra_actions])
-        self.intra_Nk = ...
-        self.intra_vk = ...
-        self.cellular_Nk = ...
-        self.cellular_vk = ...
-        self.behaviour_policy = ... # note that we have probabilistic policies now
+        self.cell_Nk = np.zeros(shape=[self.n_states, self.n_actions])
+        # self.intra_trans_fn = np.zeros(shape=[self.n_intra_states, self.n_intra_actions, self.n_intra_states])
+        # self.intra_trans_err = np.zeros(shape=[self.n_intra_states, self.n_intra_actions, self.n_intra_states])
+        # self.intra_trans_est = np.zeros(shape=[self.n_intra_states, self.n_intra_actions])
+        # self.intra_Nk = ...
+        # self.intra_vk = ...
+        # self.cellular_Nk = ...
+        # self.cellular_vk = ...
         self.policy_update = np.zeros(shape=[self.n_cells], dtype=bool)
 
         # misc initialisations
@@ -54,7 +76,57 @@ class PeUcrl(Ucrl2):
         with open(self.prism_path + 'constraints.props', 'a') as props_file:
             props_file.write(self.regulatory_constraints)
 
-    def increment_counts(self):
+    def updateN(self):
+        super().updateN()
+        for tab_s in range(self.n_states):
+            for tab_a in range(self.n_actions):
+                self.cell_Nk[tab_s, tab_a] += self.cell_vk[tab_s, tab_a]
+
+    # def update_cellular_vk(self):
+    #     for tabular_state in range(self.n_states):
+    #         for intra_state in tabular2cellular(tabular_state, self.n_intra_states, self.n_cells):
+    #             if intra_state == self.observations[0][-2]:
+    #                 for tabular_action in range(self.n_actions):
+    #                     for intra_action in tabular2cellular(tabular_action, self.n_intra_actions, self.n_cells):
+    #                         if intra_action == self.observations[1][-1]:
+    #                             self.cellular_vk[tabular_state, tabular_action] += 1
+
+    def updateP(self):
+        for tabular_state in range(self.n_states):
+            for intra_state in tabular2cellular(tabular_state, self.n_intra_states, self.n_cells):
+                if intra_state == self.observations[0][-2]:
+                    for tabular_action in range(self.n_actions):
+                        for intra_action in tabular2cellular(tabular_action, self.n_intra_actions, self.n_cells):
+                            if intra_action == self.observations[1][-1]:
+                                for tabular_next_state in range(self.n_states):
+                                    for intra_next_state in tabular2cellular(tabular_next_state, self.n_intra_states, self.n_cells):
+                                        if intra_next_state == self.observations[0][-1]:
+                                            self.Pk[tabular_state, tabular_action, tabular_next_state] += 1
+
+
+    def distances(self):
+
+        for tab_s in range(self.n_states):
+            for tab_a in range(self.n_actions):
+
+                self.r_distances[tab_s, tab_a] = np.sqrt((7 * np.log(2 * self.n_states * self.n_actions * self.t / self.delta)) # self.confidence_level
+                / (2 * max([1, self.Nk[tab_s, tab_a]])))
+
+                self.p_distances[tab_s, tab_a] = np.sqrt((14 * self.n_states * np.log(2 * self.n_actions * self.t / self.delta))
+                / (max([1, self.cell_Nk[tab_s, tab_a]]))) # cell_Nk
+    
+    def new_episode(self):
+        behaviour_policy = deepcopy(self.policy)
+        super().new_episode()
+        target_policy = deepcopy(self.policy)
+        self.policy = self.pe_shield(behaviour_policy, target_policy)
+
+    def distances(self):
+        ...
+
+    def update(self, current_state, reward, side_effects):
+
+        super().update(current_state, reward, side_effects)
 
         # intracellular
         cellular_state = tabular2cellular(self.observations[0][...], self.n_intracellular_states, self.n_cells)
@@ -99,12 +171,6 @@ class PeUcrl(Ucrl2):
                         ):
                         self.transition_estimates[flat_state, flat_action, flat_next_state] \
                         *= self.intracellular_transition_estimates[intracellular_state, intracellular_action, intracellular_next_state]
-
-    def action_pruning(self):
-        ...
-
-    def side_effects_processing(self):
-        ...
 
     def pe_shield(self): # I think this one is done, but it is much more complex now ...
         
@@ -266,3 +332,12 @@ class PeUcrl(Ucrl2):
                 for cell in self.cell_labelling_function[count]:
                     prism_file.write("c_" + str(cell) + " + ")
                 prism_file.write("0;\n")
+
+
+    ############ for later ############
+
+    def action_pruning(self):
+        ...
+    
+    def side_effects_processing(self):
+        ...
