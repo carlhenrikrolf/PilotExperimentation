@@ -2,6 +2,7 @@
 
 import copy as cp
 from agents.utils import * #from learners.discreteMDPs.utils import *
+from time import perf_counter_ns
 
 #from learners.discreteMDPs.AgentInterface import Agent
 
@@ -24,12 +25,12 @@ class Ucrl2Agent:
     ):
         """
         Vanilla UCRL2 based on "Jaksch, Thomas, Ronald Ortner, and Peter Auer. "Near-optimal regret bounds for reinforcement learning." Journal of Machine Learning Research 11.Apr (2010): 1563-1600."
-        :param nS: the number of states
-        :param nA: the number of actions
+        :param n_states: the number of states
+        :param n_actions: the number of actions
         :param delta:  confidence level in (0,1)
         """
-        self.nS = n_intracellular_states ** n_cells
-        self.nA = n_intracellular_actions ** n_cells
+        self.n_states = n_intracellular_states ** n_cells
+        self.n_actions = n_intracellular_actions ** n_cells
         self.t = 1
         self.delta = confidence_level
 
@@ -41,19 +42,19 @@ class Ucrl2Agent:
         np.random.seed(seed=seed)
 
         self.observations = [[], [], []] # list of the observed (states, actions, rewards) ordered by time
-        self.vk = np.zeros((self.nS, self.nA)) #the state-action count for the current episode k
-        self.Nk = np.zeros((self.nS, self.nA)) #the state-action count prior to episode k
+        self.vk = np.zeros((self.n_states, self.n_actions)) #the state-action count for the current episode k
+        self.Nk = np.zeros((self.n_states, self.n_actions)) #the state-action count prior to episode k
 
-        self.r_distances = np.zeros((self.nS, self.nA))
-        self.p_distances = np.zeros((self.nS, self.nA))
-        self.Pk = np.zeros((self.nS, self.nA, self.nS))
-        self.Rk = np.zeros((self.nS, self.nA))
+        self.r_distances = np.zeros((self.n_states, self.n_actions))
+        self.p_distances = np.zeros((self.n_states, self.n_actions))
+        self.Pk = np.zeros((self.n_states, self.n_actions, self.n_states))
+        self.Rk = np.zeros((self.n_states, self.n_actions))
 
-        self.u = np.zeros(self.nS)
+        self.u = np.zeros(self.n_states)
         self.span = []
-        self.policy = np.zeros((self.nS, self.nA)) # policy
-        for s in range(self.nS):
-            for a in range(self.nA):
+        self.policy = np.zeros((self.n_states, self.n_actions)) # policy
+        for s in range(self.n_states):
+            for a in range(self.n_actions):
                 if cellular2tabular(initial_policy[:, s], self.n_intracellular_actions, self.n_cells) == a:
                     self.policy[s, a] = 1.0
 
@@ -62,8 +63,8 @@ class Ucrl2Agent:
 
     # Auxiliary function to update N the current state-action count.
     def updateN(self):
-        for s in range(self.nS):
-            for a in range(self.nA):
+        for s in range(self.n_states):
+            for a in range(self.n_actions):
                 self.Nk[s, a] += self.vk[s, a]
 
     # Auxiliary function to update R the accumulated reward.
@@ -76,17 +77,17 @@ class Ucrl2Agent:
 
     # Auxiliary function updating the values of r_distances and p_distances (i.e. the confidence bounds used to build the set of plausible MDPs).
     def distances(self):
-        for s in range(self.nS):
-            for a in range(self.nA):
-                self.r_distances[s, a] = np.sqrt((7 * np.log(2 * self.nS * self.nA * self.t / self.delta))
+        for s in range(self.n_states):
+            for a in range(self.n_actions):
+                self.r_distances[s, a] = np.sqrt((7 * np.log(2 * self.n_states * self.n_actions * self.t / self.delta))
                                                  / (2 * max([1, self.Nk[s, a]])))
-                self.p_distances[s, a] = np.sqrt((14 * self.nS * np.log(2 * self.nA * self.t / self.delta))
+                self.p_distances[s, a] = np.sqrt((14 * self.n_states * np.log(2 * self.n_actions * self.t / self.delta))
                                                  / (max([1, self.Nk[s, a]])))
 
     # Computing the maximum proba in the Extended Value Iteration for given state s and action a.
     def max_proba(self, p_estimate, sorted_indices, s, a):
         min1 = min([1, p_estimate[s, a, sorted_indices[-1]] + (self.p_distances[s, a] / 2)])
-        max_p = np.zeros(self.nS)
+        max_p = np.zeros(self.n_states)
         if min1 == 1:
             max_p[sorted_indices[-1]] = 1
         else:
@@ -101,15 +102,15 @@ class Ucrl2Agent:
     # The Extend Value Iteration algorithm (approximated with precision epsilon), in parallel policy updated with the greedy one.
     def EVI(self, r_estimate, p_estimate, epsilon=0.01, max_iter=1000):
         u0 = self.u - min(self.u)  #sligthly boost the computation and doesn't seems to change the results
-        u1 = np.zeros(self.nS)
-        sorted_indices = np.arange(self.nS)
+        u1 = np.zeros(self.n_states)
+        sorted_indices = np.arange(self.n_states)
         niter = 0
         while True:
             niter += 1
-            for s in range(self.nS):
+            for s in range(self.n_states):
 
-                temp = np.zeros(self.nA)
-                for a in range(self.nA):
+                temp = np.zeros(self.n_actions)
+                for a in range(self.n_actions):
                     max_p = self.max_proba(p_estimate, sorted_indices, s, a)
                     temp[a] = min((1, r_estimate[s, a] + self.r_distances[s, a])) + sum(
                         [u * p for (u, p) in zip(u0, max_p)])
@@ -118,7 +119,7 @@ class Ucrl2Agent:
                 nn = [-self.Nk[s, a] for a in arg]
                 (nmax, arg2) = allmax(nn)
                 choice = [arg[a] for a in arg2]
-                self.policy[s] = [1. / len(choice) if x in choice else 0 for x in range(self.nA)]
+                self.policy[s] = [1. / len(choice) if x in choice else 0 for x in range(self.n_actions)]
 
             diff = [abs(x - y) for (x, y) in zip(u1, u0)]
             if (max(diff) - min(diff)) < epsilon:
@@ -126,7 +127,7 @@ class Ucrl2Agent:
                 break
             else:
                 u0 = u1 - min(u1)
-                u1 = np.zeros(self.nS)
+                u1 = np.zeros(self.n_states)
                 sorted_indices = np.argsort(u0)
             if niter > max_iter:
                 self.u = u1 - min(u1)
@@ -136,47 +137,48 @@ class Ucrl2Agent:
 
     # To start a new episode (init var, computes estmates and run EVI).
     def new_episode(self):
+        self.start_episode = perf_counter_ns()
         self.updateN()
-        self.vk = np.zeros((self.nS, self.nA))
-        r_estimate = np.zeros((self.nS, self.nA))
-        p_estimate = np.zeros((self.nS, self.nA, self.nS))
-        for s in range(self.nS):
-            for a in range(self.nA):
+        self.vk = np.zeros((self.n_states, self.n_actions))
+        r_estimate = np.zeros((self.n_states, self.n_actions))
+        p_estimate = np.zeros((self.n_states, self.n_actions, self.n_states))
+        for s in range(self.n_states):
+            for a in range(self.n_actions):
                 div = max([1, self.Nk[s, a]])
                 r_estimate[s, a] = self.Rk[s, a] / div
-                for next_s in range(self.nS):
+                for next_s in range(self.n_states):
                     p_estimate[s, a, next_s] = self.Pk[s, a, next_s] / div
         self.distances()
         self.EVI(r_estimate, p_estimate, epsilon=1. / max(1, self.t))
+        self.end_episode = perf_counter_ns()
 
     # To reinitialize the learner with a given initial state inistate.
     def reset(self, inistate):
         self.t = 1
         self.observations = [[inistate], [], []]
-        self.vk = np.zeros((self.nS, self.nA))
-        self.Nk = np.zeros((self.nS, self.nA))
-        self.u = np.zeros(self.nS)
-        self.Pk = np.zeros((self.nS, self.nA, self.nS))
-        self.Rk = np.zeros((self.nS, self.nA))
+        self.vk = np.zeros((self.n_states, self.n_actions))
+        self.Nk = np.zeros((self.n_states, self.n_actions))
+        self.u = np.zeros(self.n_states)
+        self.Pk = np.zeros((self.n_states, self.n_actions, self.n_states))
+        self.Rk = np.zeros((self.n_states, self.n_actions))
         self.span = [0]
-        for s in range(self.nS):
-            for a in range(self.nA):
-                self.policy[s, a] = 1. / self.nA
+        for s in range(self.n_states):
+            for a in range(self.n_actions):
+                self.policy[s, a] = 1. / self.n_actions
         self.new_episode()
 
     # To chose an action for a given state (and start a new episode if necessary -> stopping criterion defined here).
-    def stopping_criterion(self, state, action):
-        return self.vk[state, action] >= max([1, self.Nk[state, action]])
-
     def sample_action(self, previous_state):
         state = self.cellular_encoding(previous_state)
         state = cellular2tabular(state, self.n_intracellular_states, self.n_cells)
         if self.t == 1:
             self.reset(state)
-        action = categorical_sample([self.policy[state, a] for a in range(self.nA)], np.random)
-        if self.stopping_criterion(state, action):
+        action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
+        self.start_episode = np.nan
+        self.end_episode = np.nan
+        if self.vk[state, action] >= max([1, self.Nk[state, action]]):
             self.new_episode()
-            action = categorical_sample([self.policy[state, a] for a in range(self.nA)], np.random)
+            action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
         self.previous_state = state
         self.previous_action = action
         tabular2cellular(action, self.n_intracellular_actions, self.n_cells)
@@ -202,4 +204,4 @@ class Ucrl2Agent:
         return 3.14 #self.end_time_step - self.start_time_step
     
     def get_ns_between_episodes(self):
-        return 3.14 #self.end_episode - self.start_episode
+        return self.end_episode - self.start_episode
