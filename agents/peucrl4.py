@@ -254,7 +254,18 @@ class PeUcrlAgent:
         self.updatev()
         self.updateP()
         self.updateR()
+        self.side_effects_processing(side_effects, observation)
         self.t += 1
+
+    def side_effects_processing(self, side_effects, observation):
+
+        current_state = tabular2cellular(observation, self.n_intracellular_states, self.n_cells)
+        for reporting_cell in range(self.n_cells):
+            for reported_cell in range(self.n_cells):
+                if side_effects[reporting_cell, reported_cell] == 'safe':
+                    self.side_effects_functions[current_state[reported_cell]] -= {'unsafe'}
+                elif side_effects[reporting_cell, reported_cell] == 'unsafe':
+                    self.side_effects_functions[current_state[reported_cell]] -= {'safe'}
 
     def pe_shield(self, behaviour_policy, target_policy, p_estimate):
         
