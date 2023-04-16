@@ -114,10 +114,25 @@ class PeUcrl(Ucrl2):
 
                 self.p_distances[tab_s, tab_a] = np.sqrt((14 * self.n_states * np.log(2 * self.n_actions * self.t / self.delta))
                 / (max([1, self.cell_Nk[tab_s, tab_a]]))) # cell_Nk
+
+    def mod_new_episode(self):
+        self.updateN()
+        self.vk = np.zeros((self.nS, self.nA))
+        self.cell_vk = np.zeros((self.nS, self.nA)) #add
+        r_estimate = np.zeros((self.nS, self.nA))
+        p_estimate = np.zeros((self.nS, self.nA, self.nS))
+        for s in range(self.nS):
+            for a in range(self.nA):
+                div = max([1, self.cell_Nk[s, a]]) #mod
+                r_estimate[s, a] = self.Rk[s, a] / div
+                for next_s in range(self.nS):
+                    p_estimate[s, a, next_s] = self.Pk[s, a, next_s] / div
+        self.distances()
+        self.EVI(r_estimate, p_estimate, epsilon=1. / max(1, self.t))
     
     def new_episode(self):
         behaviour_policy = deepcopy(self.policy)
-        super().new_episode()
+        self.mod_new_episode()
         target_policy = deepcopy(self.policy)
         self.policy = self.pe_shield(behaviour_policy, target_policy)
 

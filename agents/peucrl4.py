@@ -17,7 +17,7 @@ import subprocess
 
 class PeUcrlAgent:
 
-    """This script adds transfer learning to UCRL2"""
+    """This script adds shielding"""
 
     def __init__(
         self,
@@ -73,6 +73,15 @@ class PeUcrlAgent:
         self.regulatory_constraints = regulatory_constraints
         self.cell_Nk = np.zeros(shape=[self.n_states, self.n_actions])
         self.policy_update = np.zeros(shape=[self.n_cells], dtype=bool)
+        self.side_effects_functions = [{'safe', 'unsafe'} for _ in range(self.n_intracellular_states)]
+
+
+        # initialise prism
+        self.cpu_id = Process().cpu_num()
+        self.prism_path = 'agents/prism_files/cpu_' + str(self.cpu_id) + '/'
+        system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
+        with open(self.prism_path + 'constraints.props', 'a') as props_file:
+            props_file.write(self.regulatory_constraints)
 
     def name(self):
         return "PEUCRL"
@@ -178,7 +187,10 @@ class PeUcrlAgent:
                 for next_s in range(self.n_states):
                     p_estimate[s, a, next_s] = self.Pk[s, a, next_s] / div
         self.distances()
+        behaviour_policy = deepcopy(self.policy)
         self.EVI(r_estimate, p_estimate, epsilon=1. / max(1, self.t))
+        target_policy = deepcopy(self.policy)
+        self.pe_shield(behaviour_policy, target_policy, p_estimate)
         self.end_episode = perf_counter_ns()
 
     # To reinitialize the learner with a given initial state inistate.
@@ -197,7 +209,7 @@ class PeUcrlAgent:
         # for s in range(self.n_states):
         #     for a in range(self.n_actions):
         #         self.policy[s, a] = 1. / self.n_actions
-        self.new_episode()
+        # self.new_episode()
 
     # To chose an action for a given state (and start a new episode if necessary -> stopping criterion defined here).
     def sample_action(self, previous_state):
@@ -207,13 +219,13 @@ class PeUcrlAgent:
             self.reset(state)
         action = cellular2tabular(self.policy[:,state], self.n_intracellular_actions, self.n_cells)
         #action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
+        self.previous_state = state # moved
         self.start_episode = np.nan
         self.end_episode = np.nan
         if self.vk[state, action] >= max([1, self.Nk[state, action]]):
             self.new_episode()
             action = cellular2tabular(self.policy[:,state], self.n_intracellular_actions, self.n_cells)
             #action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
-        self.previous_state = state
         self.previous_action = action
         tabular2cellular(action, self.n_intracellular_actions, self.n_cells)
         action = self.cellular_decoding(action)
@@ -244,6 +256,122 @@ class PeUcrlAgent:
         self.updateR()
         self.t += 1
 
+    def pe_shield(self, behaviour_policy, target_policy, p_estimate):
+        
+        tmp_policy = deepcopy(behaviour_policy)
+        cell_set = set(range(self.n_cells))
+        while len(cell_set) >= 1:
+            cell = np.random.choice(list(cell_set))
+            cell_set -= {cell}
+            tmp_policy[cell, :] = target_policy[cell, :]
+            if self.policy_update[cell] == 0:
+                initial_policy_is_updated = True
+                self.policy_update[cell] = 1
+            else:
+                initial_policy_is_updated = False
+            verified = self.verify_with_prism(tmp_policy, p_estimate)
+            if not verified:
+                tmp_policy[cell, :] = deepcopy(behaviour_policy[cell, :])
+                if initial_policy_is_updated:
+                    self.policy_update[cell] = 0
+        self.policy = deepcopy(tmp_policy)
+
+    # Prism
+    def verify_with_prism(
+        self,
+        tmp_policy,
+        p_estimate,
+    ):
+        
+        self.write_model_file(tmp_policy, p_estimate)
+        try:
+            output = subprocess.check_output(['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props'])
+        except subprocess.CalledProcessError as error:
+            error = error.output
+            error = error.decode()
+            print(error)
+            raise ValueError('Prism returned an error, see above.')
+        output = output.decode()
+        occurances = 0
+        for line in output.splitlines():
+            if 'Result:' in line:
+                occurances += 1
+                if 'true' in line:
+                    verified = True
+                elif 'false' in line:
+                    verified = False
+                else:
+                    raise ValueError('Verification returned non-Boolean result.')
+        if occurances != 1:
+            raise ValueError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
+        self.prism_output = output # for debugging purposes
+
+        return verified
+    
+    def write_model_file(
+            self,
+            tmp_policy,
+            p_estimate,
+            epsilon: float = 0.000000000000001,
+        ):
+        
+        system('rm -fr ' + self.prism_path + 'model.prism')
+        with open(self.prism_path + 'model.prism', 'a') as prism_file:
+
+            prism_file.write('dtmc\n\n')
+
+            for flat_state in range(self.n_states):
+                for cell in range(self.n_cells):
+                    C = 0
+                    if self.policy_update[cell] == 1:
+                        intracellular_states_set = tabular2cellular(flat_state, self.n_intracellular_states, self.n_cells)
+                        for intracellular_state in intracellular_states_set:
+                            if 'unsafe' in self.side_effects_functions[intracellular_state]:
+                                C = 1
+                                break
+                    prism_file.write('const int C' + str(flat_state) + '_' + str(cell) + ' = ' + str(C) + ';\n')
+            prism_file.write('\n')
+
+            prism_file.write('module M\n\n')
+
+            prism_file.write('s : [0..' + str(self.n_states) + '] init ' + str(self.previous_state) + ';\n')
+            for cell in range(self.n_cells):
+                prism_file.write('c_' + str(cell) + ' : [0..1] init C' + str(self.previous_state) + '_' + str(cell) + ';\n')
+            prism_file.write('\n')
+
+            for flat_state in range(self.n_states):
+                prism_file.write('[] (s = ' + str(flat_state) + ') -> ')
+                flat_action = cellular2tabular(tmp_policy[:, flat_state], self.n_intracellular_actions, self.n_cells)
+                init_iter = True
+                for next_flat_state in range(self.n_states):
+                    lb = max(
+                        [epsilon,
+                         p_estimate[flat_state, flat_action, next_flat_state] - self.p_distances[flat_state, flat_action]]
+                    )
+                    ub = min(
+                        [1-epsilon,
+                         p_estimate[flat_state, flat_action, next_flat_state] + self.p_distances[flat_state, flat_action]]
+                    )
+                    if not init_iter:
+                        prism_file.write(' + ')
+                    prism_file.write('[' + str(lb) + ',' + str(ub) + "] : (s' = " + str(next_flat_state) + ')')
+                    for cell in range(self.n_cells):
+                        prism_file.write(' & (c_' + str(cell) + "' = C" + str(next_flat_state) + '_' + str(cell) + ')')
+                    init_iter = False
+                prism_file.write(';\n')
+            prism_file.write('\n')
+
+            prism_file.write('endmodule\n\n')
+
+            prism_file.write("formula n = ")
+            for cell in range(self.n_cells):
+                prism_file.write("c_" + str(cell)+ " + ")
+            prism_file.write("0;\n")
+            for count, cell_class in enumerate(self.cell_classes):
+                prism_file.write("formula n_" + cell_class + " = ")
+                for cell in self.cell_labelling_function[count]:
+                    prism_file.write("c_" + str(cell) + " + ")
+                prism_file.write("0;\n")
 
     # subroutines the user can call to collect data
 

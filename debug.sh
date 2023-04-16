@@ -1,5 +1,5 @@
 config=polarisation_16.json
-agent=ucrl2
+agent=peucrl
 
 out_dir=debug
 rm -f -r results/$out_dir
