@@ -176,7 +176,8 @@ class Ucrl2Agent:
         action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
         self.start_episode = np.nan
         self.end_episode = np.nan
-        if self.vk[state, action] >= max([1, self.Nk[state, action]]):
+        self.stopping = self.vk[state, action] >= max([1, self.Nk[state, action]])
+        if self.stopping:
             self.new_episode()
             action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
         self.previous_state = state
@@ -201,7 +202,14 @@ class Ucrl2Agent:
     # subroutines the user can call to collect data
 
     def get_ns_between_time_steps(self):
-        return 3.14 #self.end_time_step - self.start_time_step
+        # there is no action pruning
+        return 0 #self.end_time_step - self.start_time_step
     
     def get_ns_between_episodes(self):
         return self.end_episode - self.start_episode
+    
+    def get_update_type(self):
+        if self.stopping:
+            return {'new_episode': list(range(self.n_cells)), 'new_action_pruning': []}
+        else:
+            return {'new_episode': [], 'new_action_pruning': []}

@@ -1,7 +1,7 @@
 # settings
-agent_id_set = ['peucrl_minus_r', 'peucrl_minus_r']
-config_file_set = ['polarisation_11.json', 'polarisation_12.json']
-experiment_dir_set = ['par_1', 'par_2']
+agent_id_set = ['peucrl', 'peucrl', 'peucrl', 'peucrl', 'peucrl', 'ucrl2', 'ucrl2', 'ucrl2', 'ucrl2', 'ucrl2']
+config_file_set = ['polarisation_0.json', 'polarisation_1.json', 'polarisation_2.json', 'polarisation_3.json', 'polarisation_4.json', 'polarisation_0.json', 'polarisation_1.json', 'polarisation_2.json', 'polarisation_3.json', 'polarisation_4.json']
+experiment_dir_set = ['0peucrl', '1peucrl', '2peucrl', '3peucrl', '4peucrl', '0ucrl2', '1ucrl2', '2ucrl2', '3ucrl2', '4ucrl2']
 
 # import modules
 from utils import train
@@ -11,7 +11,6 @@ from os import system
 
 # make checks
 assert len(agent_id_set) == len(config_file_set) == len(experiment_dir_set)
-system('cd results; rm -r -f par_1; rm -r -f par_2')
 
 system('pip3 install -e gym-cellular -q')
 
@@ -25,7 +24,7 @@ def parallel_train(agent_id, config_file_name, experiment_dir):
     )
 
 def main():
-    with ProcessPoolExecutor(max_workers=2) as executor:
+    with ProcessPoolExecutor(max_workers=10) as executor:
         executor.map(parallel_train, agent_id_set, config_file_set, experiment_dir_set)
 
 if __name__ == '__main__':

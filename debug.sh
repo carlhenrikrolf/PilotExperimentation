@@ -1,4 +1,4 @@
-config=polarisation_18.json
+config=polarisation_0.json
 agent=peucrl
 
 out_dir=debug

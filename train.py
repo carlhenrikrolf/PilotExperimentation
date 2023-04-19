@@ -1,7 +1,7 @@
 """This script runs an exploring reinforcement learning agent in a specified environments. All specifications for the experiments should be given as a .json file. The path to that file is used as input to this script. Further the name of the output subdirectory in .data/ should be given as the second argument."""
 
 # settings
-render = False
+render = True
 debugger = True
 
 # load modules
