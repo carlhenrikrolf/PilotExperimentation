@@ -115,11 +115,11 @@ def train(
         print("time step:", 0, "\n")
 
     with open(experiment_path + 'data.csv', 'a') as data_file:
-        data_file.write('time_step,reward,side_effects_incidence,ns_between_time_steps,ns_between_episodes,explorability')
-    with open(experiment_path + 'update_type.csv', 'a') as update_type_file:
-        update_type_file.write('time_step')
-        for cell in range(0, agt.n_cells):
-            update_type_file.write(',new_episode_' + str(cell) + ',new_action_pruning_' + str(cell))
+        data_file.write('time_step,reward,side_effects_incidence,ns_between_time_steps,ns_between_episodes,explorability,transfer_explorability')
+    # with open(experiment_path + 'update_type.csv', 'a') as update_type_file:
+    #     update_type_file.write('time_step')
+    #     for cell in range(0, agt.n_cells):
+    #         update_type_file.write(',new_episode_' + str(cell) + ',new_action_pruning_' + str(cell))
 
     for time_step in range(config["max_time_steps"]):
 
@@ -130,20 +130,25 @@ def train(
 
         with open(experiment_path + 'data.csv', 'a') as data_file:
             data_file.write('\n' + str(time_step + 1) + ',' + str(reward) + ',' + str(env.get_side_effects_incidence()) + ',' + str(agt.get_ns_between_time_steps()) + ',' + str(agt.get_ns_between_episodes()))
-            explorability = sum([1 if agt.vk[s,a]+agt.Nk[s,a]>0 else 0 for s in range(agt.n_states) for a in range(agt.n_actions)])
-            data_file.write(',' + str(explorability))
-        with open(experiment_path + 'update_type.csv', 'a') as update_type_file:
-            update_type_file.write('\n' + str(time_step + 1))
-            update_type = agt.get_update_type()
-            for cell in range(agt.n_cells):
-                if cell in update_type['new_episode']:
-                    update_type_file.write(',1')
-                else:
-                    update_type_file.write(',' + str(nan))
-                if cell in update_type['new_action_pruning']:
-                    update_type_file.write(',1')
-                else:
-                    update_type_file.write(',' + str(nan))
+            div = (config['n_user_states']*2*config['n_recommendations'])**config['n_users']
+            explorability = sum([1 if agt.vk[s,a]+agt.Nk[s,a]>0 else 0 for s in range(agt.n_states) for a in range(agt.n_actions)])/div
+            try:
+                transfer_explorability = sum([1 if agt.cell_vk[s,a]+agt.cell_Nk[s,a]>0 else 0 for s in range(agt.n_states) for a in range(agt.n_actions)])/div
+            except:
+                transfer_explorability = explorability
+            data_file.write(',{:e}'.format(explorability) + ',{:e}'.format(transfer_explorability))
+        # with open(experiment_path + 'update_type.csv', 'a') as update_type_file:
+        #     update_type_file.write('\n' + str(time_step + 1))
+        #     update_type = agt.get_update_type()
+        #     for cell in range(agt.n_cells):
+        #         if cell in update_type['new_episode']:
+        #             update_type_file.write(',1')
+        #         else:
+        #             update_type_file.write(',' + str(nan))
+        #         if cell in update_type['new_action_pruning']:
+        #             update_type_file.write(',1')
+        #         else:
+        #             update_type_file.write(',' + str(nan))
                 
 
         if terminated or truncated:

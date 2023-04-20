@@ -243,12 +243,25 @@ class PeUcrlAgent:
     def updatev(self):
         self.vk[self.previous_state, self.previous_action] += 1 #standard
         for tabular_state in range(self.n_states):
-            for intra_state in tabular2cellular(tabular_state, self.n_intracellular_states, self.n_cells):
-                if intra_state == self.observations[0][-2]:
-                    for tabular_action in range(self.n_actions):
-                        for intra_action in tabular2cellular(tabular_action, self.n_intracellular_actions, self.n_cells):
-                            if intra_action == self.observations[1][-1]:
-                                self.cell_vk[tabular_state, tabular_action] += 1
+            for tabular_action in range(self.n_actions):
+                for intra_state, intra_action in zip(
+                    tabular2cellular(tabular_state, self.n_intracellular_states, self.n_cells),
+                    tabular2cellular(tabular_action, self.n_intracellular_actions, self.n_cells),
+                ):
+                    for previous_intra_state, previous_intra_action in zip(
+                        tabular2cellular(self.previous_state, self.n_intracellular_states, self.n_cells),
+                        tabular2cellular(self.previous_action, self.n_intracellular_actions, self.n_cells),
+                    ):
+                        if intra_state == previous_intra_state and intra_action == previous_intra_action:
+                            self.cell_vk[tabular_state, tabular_action] += 1
+
+        # for tabular_state in range(self.n_states):
+        #     for intra_state in tabular2cellular(tabular_state, self.n_intracellular_states, self.n_cells):
+        #         if intra_state in tabular2cellular(self.observations[0][-2], self.n_intracellular_states, self.n_cells):
+        #             for tabular_action in range(self.n_actions):
+        #                 for intra_action in tabular2cellular(tabular_action, self.n_intracellular_actions, self.n_cells):
+        #                     if intra_action in tabular2cellular(self.observations[1][-1], self.n_intracellular_actions, self.n_cells):
+        #                         self.cell_vk[tabular_state, tabular_action] += 1
 
 
     # To update the learner after one step of the current policy.
