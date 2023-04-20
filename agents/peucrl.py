@@ -86,6 +86,7 @@ class PeUcrlAgent:
         self.intracellular_transition_indicators = np.ones((self.n_intracellular_states, self.n_intracellular_actions), dtype=int)
         self.transition_indicators = np.ones((self.n_states, self.n_actions), dtype=int)
         self.new_pruning = False
+        self.intracellular_Pk = np.zeros(shape=[self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states], dtype=int)
 
     def name(self):
         return "PEUCRL"
@@ -104,15 +105,33 @@ class PeUcrlAgent:
     # Auxiliary function to update P the transitions count.
     def updateP(self):
         for tabular_state in range(self.n_states):
-            for intra_state in tabular2cellular(tabular_state, self.n_intracellular_states, self.n_cells):
-                if intra_state == self.observations[0][-2]:
-                    for tabular_action in range(self.n_actions):
-                        for intra_action in tabular2cellular(tabular_action, self.n_intracellular_actions, self.n_cells):
-                            if intra_action == self.observations[1][-1]:
-                                for tabular_next_state in range(self.n_states):
-                                    for intra_next_state in tabular2cellular(tabular_next_state, self.n_intracellular_states, self.n_cells):
-                                        if intra_next_state == self.observations[0][-1]:
-                                            self.Pk[tabular_state, tabular_action, tabular_next_state] += 1
+            for tabular_action in range(self.n_actions):
+                for tabular_next_state in range(self.n_states):
+                    tmp = np.inf
+                    for intra_state, intra_action, next_intra_state in zip(
+                        tabular2cellular(tabular_state, self.n_intracellular_states, self.n_cells),
+                        tabular2cellular(tabular_action, self.n_intracellular_actions, self.n_cells),
+                        tabular2cellular(tabular_next_state, self.n_intracellular_states, self.n_cells),
+                    ):
+                        # for prev_intra_state, prev_intra_action, prev_next_intra_state in zip(
+                        #     tabular2cellular(self.observations[0][-2], self.n_intracellular_states, self.n_cells),
+                        #     tabular2cellular(self.observations[1][-1], self.n_intracellular_actions, self.n_cells),
+                        #     tabular2cellular(self.observations[0][-1], self.n_intracellular_states, self.n_cells),
+                        # ):
+                        #     if intra_state == prev_intra_state \
+                        #     and intra_action == prev_intra_action \
+                        #     and next_intra_state == prev_next_intra_state:
+                        tmp = min([tmp, self.intracellular_Pk[intra_state, intra_action, next_intra_state]])
+                    self.Pk[tabular_state, tabular_action, tabular_next_state] = tmp
+
+    def update_intracellularPk(self):
+        for intra_state, intra_action, next_intra_state in zip(
+            tabular2cellular(self.observations[0][-2], self.n_intracellular_states, self.n_cells),
+            tabular2cellular(self.observations[1][-1], self.n_intracellular_actions, self.n_cells),
+            tabular2cellular(self.observations[0][-1], self.n_intracellular_states, self.n_cells),
+        ):
+            self.intracellular_Pk[intra_state, intra_action, next_intra_state] += 1
+
 
     # Auxiliary function updating the values of r_distances and p_distances (i.e. the confidence bounds used to build the set of plausible MDPs).
     def distances(self):
@@ -180,6 +199,7 @@ class PeUcrlAgent:
     # To start a new episode (init var, computes estmates and run EVI).
     def new_episode(self):
         self.start_episode = perf_counter_ns()
+        self.updateP()
         if self.stopping:
             self.updateN()
             self.vk = np.zeros((self.n_states, self.n_actions))
@@ -188,8 +208,9 @@ class PeUcrlAgent:
         p_estimate = np.zeros((self.n_states, self.n_actions, self.n_states))
         for s in range(self.n_states):
             for a in range(self.n_actions):
-                div = max([1, self.cell_Nk[s, a] + self.cell_vk[s, a]]) # mod
-                r_estimate[s, a] = self.Rk[s, a] / max([1, self.Nk[s, a] + self.vk[s, a]]) # mod
+                div = max([1, self.Nk[s, a] + self.vk[s, a]])
+                r_estimate[s, a] = self.Rk[s, a] / div
+                div = max([1, self.cell_Nk[s, a] + self.cell_vk[s, a]])
                 for next_s in range(self.n_states):
                     p_estimate[s, a, next_s] = self.Pk[s, a, next_s] / div
         self.distances()
@@ -212,6 +233,7 @@ class PeUcrlAgent:
         self.Rk = np.zeros((self.n_states, self.n_actions))
         self.span = [0]
         self.policy = self.initial_policy
+        self.intracellular_Pk = np.zeros(shape=[self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states], dtype=int)
         # for s in range(self.n_states):
         #     for a in range(self.n_actions):
         #         self.policy[s, a] = 1. / self.n_actions
@@ -234,9 +256,9 @@ class PeUcrlAgent:
             action = cellular2tabular(self.policy[:,state], self.n_intracellular_actions, self.n_cells)
             #action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
         self.previous_action = action
-        tabular2cellular(action, self.n_intracellular_actions, self.n_cells)
+        action = tabular2cellular(action, self.n_intracellular_actions, self.n_cells)
         action = self.cellular_decoding(action)
-        return tabular2cellular(action, self.n_intracellular_actions, self.n_cells)
+        return action
 
     # modification:
 
@@ -272,7 +294,7 @@ class PeUcrlAgent:
         self.observations[1].append(self.previous_action)
         self.observations[2].append(reward)
         self.updatev()
-        self.updateP()
+        self.update_intracellularPk()
         self.updateR()
         self.side_effects_processing(side_effects, observation)
         self.action_pruning()
