@@ -35,46 +35,43 @@ class PeUcrlAgent:
         seed=0,
     ):
 
-        self.n_states = n_intracellular_states ** n_cells
-        self.n_actions = n_intracellular_actions ** n_cells
-        self.t = 1
+        # assign parameters to self
         self.delta = confidence_level
-
         self.n_cells = n_cells
         self.n_intracellular_states = n_intracellular_states
         self.n_intracellular_actions = n_intracellular_actions
         self.cellular_encoding = cellular_encoding
         self.cellular_decoding = cellular_decoding
-        np.random.seed(seed=seed)
-
-        self.observations = [[], [], []] # list of the observed (states, actions, rewards) ordered by time
-        self.vk = np.zeros((self.n_states, self.n_actions)) #the state-action count for the current episode k
-        self.Nk = np.zeros((self.n_states, self.n_actions)) #the state-action count prior to episode k
-
-        self.r_distances = np.zeros((self.n_states, self.n_actions))
-        self.p_distances = np.zeros((self.n_states, self.n_actions))
-        self.Pk = np.zeros((self.n_states, self.n_actions, self.n_states))
-        self.Rk = np.zeros((self.n_states, self.n_actions))
-
-        self.u = np.zeros(self.n_states)
-        self.span = []
         self.initial_policy = initial_policy
-        self.policy = self.initial_policy
-        # self.policy = np.zeros((self.n_states, self.n_actions)) # policy
-        # for s in range(self.n_states):
-        #     for a in range(self.n_actions):
-        #         if cellular2tabular(initial_policy[:, s], self.n_intracellular_actions, self.n_cells) == a:
-        #             self.policy[s, a] = 1.0
-
-        # modifications:
-
         self.cell_classes = cell_classes
         self.cell_labelling_function = cell_labelling_function
         self.regulatory_constraints = regulatory_constraints
-        self.cell_Nk = np.zeros(shape=[self.n_states, self.n_actions])
-        self.policy_update = np.zeros(shape=[self.n_cells], dtype=bool)
-        self.side_effects_functions = [{'safe', 'unsafe'} for _ in range(self.n_intracellular_states)]
 
+        # calculate additional parameters
+        self.n_states = n_intracellular_states ** n_cells
+        self.n_actions = n_intracellular_actions ** n_cells
+
+        # initialize counters
+        self.t = 1
+        self.vk = np.zeros(shape=[self.n_states, self.n_actions], dtype=int) #the state-action count for the current episode k
+        self.Nk = np.zeros(shape=[self.n_states, self.n_actions], dtype=int) #the state-action count prior to episode k
+        self.Pk = np.zeros(shape=[self.n_states, self.n_actions, self.n_states], dtype=int)
+        self.Rk = np.zeros(shape=[self.n_states, self.n_actions], dtype=float)
+
+        # initialize flags
+        self.intracellular_transition_indicators = np.ones(shape=[self.n_intracellular_states, self.n_intracellular_actions], dtype=int)
+        self.transition_indicators = np.ones(shape=[self.n_states, self.n_actions], dtype=int)
+        self.new_pruning = False
+        self.policy_update = np.zeros(shape=[self.n_cells], dtype=int)
+
+        # misc initializations
+        np.random.seed(seed=seed)
+        self.r_distances = np.zeros(shape=[self.n_states, self.n_actions], dtype=float)
+        self.p_distances = np.zeros(shape=[self.n_states, self.n_actions], dtype=float)
+        self.u = np.zeros(shape=self.n_states, dtype=float)
+        self.policy = deepcopy(self.initial_policy)
+        self.side_effects_functions = [{'safe', 'unsafe'} for _ in range(self.n_intracellular_states)]
+        self.current_state = None
 
         # initialise prism
         self.cpu_id = Process().cpu_num()
@@ -83,55 +80,23 @@ class PeUcrlAgent:
         with open(self.prism_path + 'constraints.props', 'a') as props_file:
             props_file.write(self.regulatory_constraints)
 
-        self.intracellular_transition_indicators = np.ones((self.n_intracellular_states, self.n_intracellular_actions), dtype=int)
-        self.transition_indicators = np.ones((self.n_states, self.n_actions), dtype=int)
-        self.new_pruning = False
-        self.intracellular_Pk = np.zeros(shape=[self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states], dtype=int)
-
-    def name(self):
-        return "PEUCRL"
-
     # Auxiliary function to update N the current state-action count.
     def updateN(self):
         for s in range(self.n_states):
             for a in range(self.n_actions):
                 self.Nk[s, a] += self.vk[s, a]
-                self.cell_Nk[s, a] += self.cell_vk[s, a] # mod
+
+    # Auxiliary function to update v the within-episode state-action count.
+    def updatev(self):
+        self.vk[self.previous_state, self.previous_action] += 1
 
     # Auxiliary function to update R the accumulated reward.
     def updateR(self):
-        self.Rk[self.observations[0][-2], self.observations[1][-1]] += self.observations[2][-1]
+        self.Rk[self.previous_state, self.previous_action] += self.current_reward
 
     # Auxiliary function to update P the transitions count.
     def updateP(self):
-        for tabular_state in range(self.n_states):
-            for tabular_action in range(self.n_actions):
-                for tabular_next_state in range(self.n_states):
-                    tmp = np.inf
-                    for intra_state, intra_action, next_intra_state in zip(
-                        tabular2cellular(tabular_state, self.n_intracellular_states, self.n_cells),
-                        tabular2cellular(tabular_action, self.n_intracellular_actions, self.n_cells),
-                        tabular2cellular(tabular_next_state, self.n_intracellular_states, self.n_cells),
-                    ):
-                        # for prev_intra_state, prev_intra_action, prev_next_intra_state in zip(
-                        #     tabular2cellular(self.observations[0][-2], self.n_intracellular_states, self.n_cells),
-                        #     tabular2cellular(self.observations[1][-1], self.n_intracellular_actions, self.n_cells),
-                        #     tabular2cellular(self.observations[0][-1], self.n_intracellular_states, self.n_cells),
-                        # ):
-                        #     if intra_state == prev_intra_state \
-                        #     and intra_action == prev_intra_action \
-                        #     and next_intra_state == prev_next_intra_state:
-                        tmp = min([tmp, self.intracellular_Pk[intra_state, intra_action, next_intra_state]])
-                    self.Pk[tabular_state, tabular_action, tabular_next_state] = tmp
-
-    def update_intracellularPk(self):
-        for intra_state, intra_action, next_intra_state in zip(
-            tabular2cellular(self.observations[0][-2], self.n_intracellular_states, self.n_cells),
-            tabular2cellular(self.observations[1][-1], self.n_intracellular_actions, self.n_cells),
-            tabular2cellular(self.observations[0][-1], self.n_intracellular_states, self.n_cells),
-        ):
-            self.intracellular_Pk[intra_state, intra_action, next_intra_state] += 1
-
+        self.Pk[self.previous_state, self.previous_action, self.current_state] += 1
 
     # Auxiliary function updating the values of r_distances and p_distances (i.e. the confidence bounds used to build the set of plausible MDPs).
     def distances(self):
@@ -140,7 +105,7 @@ class PeUcrlAgent:
                 self.r_distances[s, a] = np.sqrt((7 * np.log(2 * self.n_states * self.n_actions * self.t / self.delta))
                                                  / (2 * max([1, self.Nk[s, a]])))
                 self.p_distances[s, a] = np.sqrt((14 * self.n_states * np.log(2 * self.n_actions * self.t / self.delta))
-                                                 / (max([1, self.cell_Nk[s, a]]))) #mod
+                                                 / (max([1, self.Nk[s, a]])))
 
     # Computing the maximum proba in the Extended Value Iteration for given state s and action a.
     def max_proba(self, p_estimate, sorted_indices, s, a):
@@ -160,28 +125,26 @@ class PeUcrlAgent:
     # The Extend Value Iteration algorithm (approximated with precision epsilon), in parallel policy updated with the greedy one.
     def EVI(self, r_estimate, p_estimate, epsilon=0.01, max_iter=1000):
         u0 = self.u - min(self.u)  #sligthly boost the computation and doesn't seems to change the results
-        u1 = np.zeros(self.n_states)
+        u1 = np.zeros(shape=self.n_states, dtype=float)
         sorted_indices = np.arange(self.n_states)
         niter = 0
         while True:
             niter += 1
             for s in range(self.n_states):
-
                 temp = np.zeros(self.n_actions)
                 for a in range(self.n_actions):
                     max_p = self.max_proba(p_estimate, sorted_indices, s, a)
                     temp[a] = min((1, r_estimate[s, a] + self.r_distances[s, a])) + sum(
                         [u * p for (u, p) in zip(u0, max_p)])
-                    temp[a] *= self.transition_indicators[s,a] # mod
+                    temp[a] *= self.transition_indicators[s,a] # modification for action pruning
+                    # if no pruning then temp[a] *= 1
                 # This implements a tie-breaking rule by choosing:  Uniform(Argmmin(Nk))
                 (u1[s], arg) = allmax(temp)
                 nn = [-self.Nk[s, a] for a in arg] # not modified for the sake of rewards
                 (nmax, arg2) = allmax(nn)
                 choice = [arg[a] for a in arg2]
                 action = np.random.choice(choice)
-                self.policy[:, s] = tabular2cellular(action, self.n_intracellular_actions, self.n_cells)
-                #self.policy[s] = [1. / len(choice) if x in choice else 0 for x in range(self.n_actions)]
-
+                self.policy[:, s] = tabular2cellular(action, self.n_intracellular_actions, self.n_cells) # modication for cellular
             diff = [abs(x - y) for (x, y) in zip(u1, u0)]
             if (max(diff) - min(diff)) < epsilon:
                 self.u = u1 - min(u1)
@@ -195,22 +158,21 @@ class PeUcrlAgent:
                 print("No convergence in EVI")
                 break
 
-
     # To start a new episode (init var, computes estmates and run EVI).
-    def new_episode(self):
-        self.start_episode = perf_counter_ns()
-        self.updateP()
-        if self.stopping:
+    def off_policy(self):
+
+        self.start_episode = perf_counter_ns() # for evaluation
+
+        # the procedure
+        if self.new_episode:
             self.updateN()
-            self.vk = np.zeros((self.n_states, self.n_actions))
-            self.cell_vk = np.zeros(shape=[self.n_states, self.n_actions])
-        r_estimate = np.zeros((self.n_states, self.n_actions))
-        p_estimate = np.zeros((self.n_states, self.n_actions, self.n_states))
+            self.vk = np.zeros(shape=[self.n_states, self.n_actions], dtype=int)
+        r_estimate = np.zeros(shape=[self.n_states, self.n_actions], dtype=float)
+        p_estimate = np.zeros(shape=[self.n_states, self.n_actions, self.n_states], dtype=float)
         for s in range(self.n_states):
             for a in range(self.n_actions):
                 div = max([1, self.Nk[s, a] + self.vk[s, a]])
                 r_estimate[s, a] = self.Rk[s, a] / div
-                div = max([1, self.cell_Nk[s, a] + self.cell_vk[s, a]])
                 for next_s in range(self.n_states):
                     p_estimate[s, a, next_s] = self.Pk[s, a, next_s] / div
         self.distances()
@@ -218,104 +180,62 @@ class PeUcrlAgent:
         self.EVI(r_estimate, p_estimate, epsilon=1. / max(1, self.t))
         target_policy = deepcopy(self.policy)
         self.pe_shield(behaviour_policy, target_policy, p_estimate)
-        self.end_episode = perf_counter_ns()
 
-    # To reinitialize the learner with a given initial state inistate.
-    def reset(self, inistate):
-        self.t = 1
-        self.observations = [[inistate], [], []]
-        self.vk = np.zeros((self.n_states, self.n_actions))
-        self.Nk = np.zeros((self.n_states, self.n_actions))
-        self.cell_vk = np.zeros((self.n_states, self.n_actions)) # mod
-        self.cell_Nk = np.zeros((self.n_states, self.n_actions)) # mod
-        self.u = np.zeros(self.n_states)
-        self.Pk = np.zeros((self.n_states, self.n_actions, self.n_states))
-        self.Rk = np.zeros((self.n_states, self.n_actions))
-        self.span = [0]
-        self.policy = self.initial_policy
-        self.intracellular_Pk = np.zeros(shape=[self.n_intracellular_states, self.n_intracellular_actions, self.n_intracellular_states], dtype=int)
-        # for s in range(self.n_states):
-        #     for a in range(self.n_actions):
-        #         self.policy[s, a] = 1. / self.n_actions
-        # self.new_episode()
+        self.end_episode = perf_counter_ns() # for evaluation
 
     # To chose an action for a given state (and start a new episode if necessary -> stopping criterion defined here).
-    def sample_action(self, previous_state):
-        s = self.cellular_encoding(previous_state)
-        state = cellular2tabular(s, self.n_intracellular_states, self.n_cells)
-        if self.t == 1:
-            self.reset(state)
+    def sample_action(self, state):
+
+        self.start_episode = np.nan # for evaluation
+        self.end_episode = np.nan # for evaluation
+
+        # the procedure
+        state = self.cellular_encoding(state)
+        state = cellular2tabular(state, self.n_intracellular_states, self.n_cells)
+        self.previous_state = deepcopy(state)
+        assert self.previous_state == self.current_state or self.current_state is None
         action = cellular2tabular(self.policy[:,state], self.n_intracellular_actions, self.n_cells)
-        #action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
-        self.previous_state = state # moved
-        self.start_episode = np.nan
-        self.end_episode = np.nan
-        self.stopping = self.vk[state, action] >= max([1, self.Nk[state, action]])
-        if self.stopping or self.new_pruning:
-            self.new_episode()
+        self.new_episode = self.vk[state, action] >= max([1, self.Nk[state, action]])
+        if self.new_episode or self.new_pruning:
+            self.off_policy()
             action = cellular2tabular(self.policy[:,state], self.n_intracellular_actions, self.n_cells)
-            #action = categorical_sample([self.policy[state, a] for a in range(self.n_actions)], np.random)
         self.previous_action = action
         action = tabular2cellular(action, self.n_intracellular_actions, self.n_cells)
         action = self.cellular_decoding(action)
         return action
 
-    # modification:
-
-    def updatev(self):
-        self.vk[self.previous_state, self.previous_action] += 1 #standard
-        for tabular_state in range(self.n_states):
-            for tabular_action in range(self.n_actions):
-                for intra_state, intra_action in zip(
-                    tabular2cellular(tabular_state, self.n_intracellular_states, self.n_cells),
-                    tabular2cellular(tabular_action, self.n_intracellular_actions, self.n_cells),
-                ):
-                    for previous_intra_state, previous_intra_action in zip(
-                        tabular2cellular(self.previous_state, self.n_intracellular_states, self.n_cells),
-                        tabular2cellular(self.previous_action, self.n_intracellular_actions, self.n_cells),
-                    ):
-                        if intra_state == previous_intra_state and intra_action == previous_intra_action:
-                            self.cell_vk[tabular_state, tabular_action] += 1
-
-        # for tabular_state in range(self.n_states):
-        #     for intra_state in tabular2cellular(tabular_state, self.n_intracellular_states, self.n_cells):
-        #         if intra_state in tabular2cellular(self.observations[0][-2], self.n_intracellular_states, self.n_cells):
-        #             for tabular_action in range(self.n_actions):
-        #                 for intra_action in tabular2cellular(tabular_action, self.n_intracellular_actions, self.n_cells):
-        #                     if intra_action in tabular2cellular(self.observations[1][-1], self.n_intracellular_actions, self.n_cells):
-        #                         self.cell_vk[tabular_state, tabular_action] += 1
-
-
     # To update the learner after one step of the current policy.
-    def update(self, current_state, reward, side_effects):
-        observation = self.cellular_encoding(current_state)
-        observation = cellular2tabular(observation, self.n_intracellular_states, self.n_cells)
-        self.observations[0].append(observation)
-        self.observations[1].append(self.previous_action)
-        self.observations[2].append(reward)
+    def update(self, state, reward, side_effects):
+
+        state = self.cellular_encoding(state)
+        state = cellular2tabular(state, self.n_intracellular_states, self.n_cells)
+        self.current_state = deepcopy(state)
+        self.current_reward = deepcopy(reward)
         self.updatev()
-        self.update_intracellularPk()
+        self.updateP()
         self.updateR()
-        self.side_effects_processing(side_effects, observation)
+        self.side_effects_processing(side_effects, state)
         self.action_pruning()
         self.t += 1
 
     def action_pruning(self):
 
-        self.start_time_step = perf_counter_ns()
+        self.start_time_step = perf_counter_ns() # for evaluation
         
-        new_pruning = False
+        # the procedure
 
-        current_state = tabular2cellular(self.observations[0][-1], self.n_intracellular_states, self.n_cells)
-        action = tabular2cellular(self.observations[1][-1], self.n_intracellular_actions, self.n_cells)
-        previous_state = tabular2cellular(self.observations[0][-2], self.n_intracellular_states, self.n_cells)
+        # initialization
+        new_pruning = False
+        previous_state = tabular2cellular(self.previous_state, self.n_intracellular_states, self.n_cells)
+        previous_action = tabular2cellular(self.previous_action, self.n_intracellular_actions, self.n_cells)
+        current_state = tabular2cellular(self.current_state, self.n_intracellular_states, self.n_cells)
         # basic case
         for cell in range(self.n_cells):
-            if {'unsafe'} == self.side_effects_functions[current_state[cell]]:
-                if self.intracellular_transition_indicators[previous_state[cell], action[cell]] == 1:
+            if self.side_effects_functions[current_state[cell]] == {'unsafe'}:
+                # maybe move to off-policy (below)
+                if self.intracellular_transition_indicators[previous_state[cell], previous_action[cell]] == 1:
                     new_pruning = True
-                self.intracellular_transition_indicators[previous_state[cell], action[cell]] = 0
-        
+                self.intracellular_transition_indicators[previous_state[cell], previous_action[cell]] = 0
         # corner cases
         if self.t == 1:
             self.path = [set() for _ in range(self.n_cells)]
@@ -324,47 +244,47 @@ class PeUcrlAgent:
             if n_unpruned_actions >= 2:
                 self.path[cell] = set()
             elif n_unpruned_actions == 1:
-                self.path[cell].add((previous_state[cell], action[cell]))
-            if ({'unsafe'} == self.side_effects_functions[current_state[cell]]) or n_unpruned_actions == 0:
-                for (intracellular_state, intracellular_action) in self.path[cell]:
-                    if self.intracellular_transition_indicators[intracellular_state, intracellular_action] == 1:
+                self.path[cell].add((previous_state[cell], previous_action[cell]))
+            if self.side_effects_functions[current_state[cell]] == {'unsafe'} or n_unpruned_actions == 0:
+                # maybe move to off-policy (below)
+                for (si, ai) in self.path[cell]:
+                    if self.intracellular_transition_indicators[si, ai] == 1:
                         new_pruning = True
-                    self.intracellular_transition_indicators[intracellular_state, intracellular_action] = 0
-
+                    self.intracellular_transition_indicators[si, ai] = 0
+        # maybe move to off-policy (below)
+        # update transition indicators
         if new_pruning:
-            for flat_state in range(self.n_states):
-                for flat_action in range(self.n_actions):
-                    for (intracellular_state, intracellular_action) in zip(
-                                tabular2cellular(flat_state, self.n_intracellular_states, self.n_cells),
-                                tabular2cellular(flat_action, self.n_intracellular_actions, self.n_cells)
+            for s in range(self.n_states):
+                for a in range(self.n_actions):
+                    for si, ai in zip(
+                            tabular2cellular(s, self.n_intracellular_states, self.n_cells),
+                            tabular2cellular(a, self.n_intracellular_actions, self.n_cells)
                         ):
-                        if self.intracellular_transition_indicators[intracellular_state, intracellular_action] == 0:
-                            self.transition_indicators[flat_state, flat_action] = 0
+                        if self.intracellular_transition_indicators[si, ai] == 0:
+                            self.transition_indicators[s, a] = 0
                             break
-        
         self.new_pruning = new_pruning
 
-        self.end_time_step = perf_counter_ns()
+        self.end_time_step = perf_counter_ns() # for evaluation
 
-    def side_effects_processing(self, side_effects, observation):
+    def side_effects_processing(self, side_effects, state):
 
-        current_state = tabular2cellular(observation, self.n_intracellular_states, self.n_cells)
+        state = tabular2cellular(state, self.n_intracellular_states, self.n_cells)
         for reporting_cell in range(self.n_cells):
             for reported_cell in range(self.n_cells):
                 if side_effects[reporting_cell, reported_cell] == 'safe':
-                    self.side_effects_functions[current_state[reported_cell]] -= {'unsafe'}
+                    self.side_effects_functions[state[reported_cell]] -= {'unsafe'}
                 elif side_effects[reporting_cell, reported_cell] == 'unsafe':
-                    self.side_effects_functions[current_state[reported_cell]] -= {'safe'}
+                    self.side_effects_functions[state[reported_cell]] -= {'safe'}
 
     def pe_shield(self, behaviour_policy, target_policy, p_estimate):
         
         tmp_policy = deepcopy(behaviour_policy)
-        self.previous_policy = deepcopy(behaviour_policy) # for evaluations
         cell_set = set(range(self.n_cells))
         while len(cell_set) >= 1:
             cell = np.random.choice(list(cell_set))
             cell_set -= {cell}
-            tmp_policy[cell, :] = target_policy[cell, :]
+            tmp_policy[cell, :] = deepcopy(target_policy[cell, :])
             if self.policy_update[cell] == 0:
                 initial_policy_is_updated = True
                 self.policy_update[cell] = 1
@@ -385,6 +305,7 @@ class PeUcrlAgent:
     ):
         
         self.write_model_file(tmp_policy, p_estimate)
+
         try:
             output = subprocess.check_output(['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props'])
         except subprocess.CalledProcessError as error:
@@ -421,16 +342,16 @@ class PeUcrlAgent:
 
             prism_file.write('dtmc\n\n')
 
-            for flat_state in range(self.n_states):
+            for s in range(self.n_states):
                 for cell in range(self.n_cells):
                     C = 0
                     if self.policy_update[cell] == 1:
-                        intracellular_states_set = tabular2cellular(flat_state, self.n_intracellular_states, self.n_cells)
-                        for intracellular_state in intracellular_states_set:
-                            if 'unsafe' in self.side_effects_functions[intracellular_state]:
+                        state = tabular2cellular(s, self.n_intracellular_states, self.n_cells)
+                        for si in state:
+                            if 'unsafe' in self.side_effects_functions[si]:
                                 C = 1
                                 break
-                    prism_file.write('const int C' + str(flat_state) + '_' + str(cell) + ' = ' + str(C) + ';\n')
+                    prism_file.write('const int C' + str(s) + '_' + str(cell) + ' = ' + str(C) + ';\n')
             prism_file.write('\n')
 
             prism_file.write('module M\n\n')
@@ -440,24 +361,24 @@ class PeUcrlAgent:
                 prism_file.write('c_' + str(cell) + ' : [0..1] init C' + str(self.previous_state) + '_' + str(cell) + ';\n')
             prism_file.write('\n')
 
-            for flat_state in range(self.n_states):
-                prism_file.write('[] (s = ' + str(flat_state) + ') -> ')
-                flat_action = cellular2tabular(tmp_policy[:, flat_state], self.n_intracellular_actions, self.n_cells)
+            for s in range(self.n_states):
+                prism_file.write('[] (s = ' + str(s) + ') -> ')
+                a = cellular2tabular(tmp_policy[:, s], self.n_intracellular_actions, self.n_cells)
                 init_iter = True
-                for next_flat_state in range(self.n_states):
+                for next_s in range(self.n_states):
                     lb = max(
                         [epsilon,
-                         p_estimate[flat_state, flat_action, next_flat_state] - self.p_distances[flat_state, flat_action]]
+                         p_estimate[s, a, next_s] - self.p_distances[s, a]]
                     )
                     ub = min(
                         [1-epsilon,
-                         p_estimate[flat_state, flat_action, next_flat_state] + self.p_distances[flat_state, flat_action]]
+                         p_estimate[s, a, next_s] + self.p_distances[s, a]]
                     )
                     if not init_iter:
                         prism_file.write(' + ')
-                    prism_file.write('[' + str(lb) + ',' + str(ub) + "] : (s' = " + str(next_flat_state) + ')')
+                    prism_file.write('[' + str(lb) + ',' + str(ub) + "] : (s' = " + str(next_s) + ')')
                     for cell in range(self.n_cells):
-                        prism_file.write(' & (c_' + str(cell) + "' = C" + str(next_flat_state) + '_' + str(cell) + ')')
+                        prism_file.write(' & (c_' + str(cell) + "' = C" + str(next_s) + '_' + str(cell) + ')')
                     init_iter = False
                 prism_file.write(';\n')
             prism_file.write('\n')
@@ -482,23 +403,5 @@ class PeUcrlAgent:
     
     def get_ns_between_episodes(self):
         return self.end_episode - self.start_episode
-    
-    def get_update_type(self):
-
-        output = {'new_episode': [], 'new_action_pruning': []}
-        def loop(policy, previous_policy, n_cells):
-            output = []
-            for cell in range(n_cells):
-                if (policy[cell,:] != previous_policy[cell,:]).any():
-                    output.append(cell)
-            return output
-        if self.stopping and self.new_pruning:
-            output['new_episode'] = loop(self.policy, self.previous_policy, self.n_cells)
-            output['new_action_pruning'] = loop(self.policy, self.previous_policy, self.n_cells)
-        elif self.stopping:
-            output['new_episode'] = loop(self.policy, self.previous_policy, self.n_cells)
-        elif self.new_pruning:
-            output['new_action_pruning'] = loop(self.policy, self.previous_policy, self.n_cells)
-        return deepcopy(output) 
             
 
