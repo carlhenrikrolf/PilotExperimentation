@@ -1,5 +1,5 @@
 config=polarisation_0.json
-agent=peucrl
+agent=noshieldingnopruning
 
 out_dir=debug
 rm -f -r results/$out_dir

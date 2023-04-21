@@ -44,35 +44,16 @@ def train(
         pprint(config)
 
     # import agent
-    if 'peucrl' in agent_id:
-
-        if agent_id == 'peucrl':
-            from agents import PeUcrlAgent as Agent
-        elif agent_id == 'peucrl_minus_r':
-            from agents import PeUcrlMinusRAgent as Agent
-        elif agent_id == 'peucrl_minus_r_minus_shield':
-            from agents import PeUcrlMinusRMinusShieldAgent as Agent
-        elif agent_id == 'peucrl_minus_r_minus_experimentation':
-            from agents import PeUcrlMinusRMinusExperimentationAgent as Agent
-        elif agent_id == 'peucrl_minus_r_minus_safety':
-            from agents import PeUcrlMinusRMinusSafetyAgent as Agent
-        elif agent_id == 'peucrl_minus_evi':
-            from agents import PeUcrlMinusEviAgent as Agent
-        elif agent_id == 'peucrl_minus_r_minus_evi':
-            from agents import PeUcrlMinusRMinusEviAgent as Agent
-        elif agent_id == 'peucrl_minus_shield':
-            from agents import PeUcrlMinusShieldAgent as Agent
-        elif agent_id == 'peucrl_minus_safety':
-            from agents import PeUcrlMinusSafetyAgent as Agent
-        elif agent_id == 'peucrl_minus_action_pruning':
-            from agents import PeUcrlMinusActionPruningAgent as Agent
-        elif agent_id == 'peucrl_minus_r_minus_action_pruning':
-            from agents import PeUcrlMinusRMinusActionPruningAgent as Agent
-        else:
-            raise ValueError('Agent not found.')
-    
-    elif 'ucrl2' in agent_id:
+    if agent_id == 'peucrl':
+        from agents import PeUcrlAgent as Agent
+    elif agent_id == 'noshielding':
+        from agents import NoShieldingAgent as Agent
+    elif agent_id == 'noshieldingnopruning':
+        from agents import NoShieldingNoPruningAgent as Agent
+    elif agent_id == 'ucrl2':
         from agents import Ucrl2Agent as Agent
+    else:
+        raise ValueError('Agent not found.')
         
 
     if 'polarisation' in config_file_name:
