@@ -1,7 +1,7 @@
 # settings
-agent_id_set = ['peucrl', 'peucrl', 'peucrl', 'peucrl', 'peucrl', 'ucrl2', 'ucrl2', 'ucrl2', 'ucrl2', 'ucrl2']
-config_file_set = ['polarisation_0.json', 'polarisation_1.json', 'polarisation_2.json', 'polarisation_3.json', 'polarisation_4.json', 'polarisation_0.json', 'polarisation_1.json', 'polarisation_2.json', 'polarisation_3.json', 'polarisation_4.json']
-experiment_dir_set = ['0peucrl', '1peucrl', '2peucrl', '3peucrl', '4peucrl', '0ucrl2', '1ucrl2', '2ucrl2', '3ucrl2', '4ucrl2']
+agent_id_set = ['peucrl', 'peucrl', 'peucrl', 'noshielding', 'noshielding','noshielding', 'noshieldingnopruning', 'noshieldingnopruning', 'noshieldingnopruning']
+config_file_set = ['polarisation_5.json', 'polarisation_6.json', 'polarisation_7.json','polarisation_5.json', 'polarisation_6.json', 'polarisation_7.json','polarisation_5.json', 'polarisation_6.json', 'polarisation_7.json']
+experiment_dir_set = ['0peucrl', '1peucrl', '2peucrl', '0noshielding', '1noshielding', '2noshielding', '0noshieldingnopruning', '1noshieldingnopruning', '2noshieldingnopruning']
 
 # import modules
 from utils import train
