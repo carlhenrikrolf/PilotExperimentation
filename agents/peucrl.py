@@ -73,12 +73,12 @@ class PeUcrlAgent:
         self.side_effects_functions = [{'safe', 'unsafe'} for _ in range(self.n_intracellular_states)]
         self.current_state = None
 
-        # initialise prism
-        self.cpu_id = Process().cpu_num()
-        self.prism_path = 'agents/prism_files/cpu_' + str(self.cpu_id) + '/'
-        system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
-        with open(self.prism_path + 'constraints.props', 'a') as props_file:
-            props_file.write(self.regulatory_constraints)
+        # # initialise prism
+        # self.cpu_id = Process().cpu_num()
+        # self.prism_path = 'agents/prism_files/cpu_' + str(self.cpu_id) + '/'
+        # system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
+        # with open(self.prism_path + 'constraints.props', 'a') as props_file:
+        #     props_file.write(self.regulatory_constraints)
 
     # Auxiliary function to update N the current state-action count.
     def updateN(self):
@@ -304,8 +304,17 @@ class PeUcrlAgent:
         p_estimate,
     ):
         
+        # initialise prism
+        self.cpu_id = Process().cpu_num()
+        self.prism_path = 'agents/prism_files/cpu_' + str(self.cpu_id) + '/'
+        system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
+        with open(self.prism_path + 'constraints.props', 'a') as props_file:
+            props_file.write(self.regulatory_constraints)
+
+        # write model file
         self.write_model_file(tmp_policy, p_estimate)
 
+        # verify
         try:
             output = subprocess.check_output(['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props'])
         except subprocess.CalledProcessError as error:
