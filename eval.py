@@ -21,18 +21,18 @@ elif len(argv) == 2:
         experiment_dir = experiment_dir + '/'
     experiment_path = 'results/' + experiment_dir
 
-    # explorability
-    # with open(experiment_path + '*.json', 'r') as config_file:
-    #     config = json.load(config_file)
-    explorability = pd.read_csv(
-        experiment_path + 'data.csv',
-        index_col='time_step',
-        usecols=['time_step', 'explorability'],
-    )
-    plt.plot(explorability)
-    #plt.axhline(y=config['n_recommendations']*config['n_user_states']**config['n_cells'])
-    plt.savefig(experiment_path + 'explorability_vs_time.png')
-    plt.close()
+    # # explorability
+    # # with open(experiment_path + '*.json', 'r') as config_file:
+    # #     config = json.load(config_file)
+    # explorability = pd.read_csv(
+    #     experiment_path + 'data.csv',
+    #     index_col='time_step',
+    #     usecols=['time_step', 'explorability'],
+    # )
+    # plt.plot(explorability)
+    # #plt.axhline(y=config['n_recommendations']*config['n_user_states']**config['n_cells'])
+    # plt.savefig(experiment_path + 'explorability_vs_time.png')
+    # plt.close()
 
     # read data
     rewards = pd.read_csv(

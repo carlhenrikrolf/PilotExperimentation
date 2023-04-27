@@ -305,9 +305,10 @@ class PeUcrlAgent:
     ):
         
         # initialise prism
-        self.cpu_id = Process().cpu_num()
-        self.prism_path = 'agents/prism_files/cpu_' + str(self.cpu_id) + '/'
-        system('rm -r -f ' + self.prism_path + '; mkdir ' + self.prism_path)
+        cpu_id = Process().cpu_num()
+        random = np.random.randint(0, 1000000)
+        self.prism_path = 'agents/prism_files/cpu_' + str(cpu_id) + '_id_' + str(random) + '/'
+        system('mkdir ' + self.prism_path)
         with open(self.prism_path + 'constraints.props', 'a') as props_file:
             props_file.write(self.regulatory_constraints)
 
@@ -336,6 +337,9 @@ class PeUcrlAgent:
         if occurances != 1:
             raise ValueError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
         self.prism_output = output # for debugging purposes
+
+        # clean
+        system('rm -r -f ' + self.prism_path)
 
         return verified
     
@@ -403,6 +407,7 @@ class PeUcrlAgent:
                 for cell in self.cell_labelling_function[count]:
                     prism_file.write("c_" + str(cell) + " + ")
                 prism_file.write("0;\n")
+
 
     # subroutines the user can call to collect data
 

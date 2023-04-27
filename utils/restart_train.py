@@ -20,13 +20,6 @@ def restart_train(
     with open(experiment_path + 'config.json', 'r') as config_file:
         config = json.load(config_file)
 
-    # initialise prism again (I should fix this)
-    agt.cpu_id = Process().cpu_num()
-    agt.prism_path = 'agents/prism_files/cpu_' + str(agt.cpu_id) + '/'
-    system('rm -r -f ' + agt.prism_path + '; mkdir ' + agt.prism_path)
-    with open(agt.prism_path + 'constraints.props', 'a') as props_file:
-        props_file.write(agt.regulatory_constraints)
-
     
     last_t = agt.t
     state = agt.previous_state

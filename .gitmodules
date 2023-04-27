@@ -5,4 +5,4 @@
 [submodule "gym-cellular"]
 	path = gym-cellular
 	url = git@github.com:carlhenrikrolf/gym-cellular.git
-	branch = main
+	branch = develop
