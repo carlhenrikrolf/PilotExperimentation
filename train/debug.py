@@ -37,13 +37,15 @@ def save_data(
         except FileExistsError:
             print("Error: Data directory '" + path + "' already exists. As a safety mechanism you are required to move it or delete it before running this script again.")
         with open(path + 'data.csv', 'a') as data_file:
-            data_file.write('time_step,')
+            data_file.write('time step,')
             data_file.write('reward,')
-            data_file.write('side_effects_incidence\n')
+            data_file.write('side effects incidence,')
+            data_file.write('off policy time\n')
     else:
         assert time_step is not None and env is not None and agt is not None
         with open(path + 'data.csv', 'a') as data_file:
             data_file.write(str(time_step) + ',')
             data_file.write(str(env['reward']) + ',')
-            data_file.write(str(env['side_effects_incidence']) + '\n')
+            data_file.write(str(env['side_effects_incidence']) + ',')
+            data_file.write(str(agt['off_policy_time']) + '\n')
 

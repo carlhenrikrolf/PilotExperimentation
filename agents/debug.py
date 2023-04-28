@@ -3,6 +3,8 @@
 from agents.utils import * 
 
 import copy as cp
+import numpy as np
+from time import perf_counter
 
 class DebugUcrl2Agt:
 
@@ -13,34 +15,56 @@ class DebugUcrl2Agt:
         regulatory_constraints='true',
     ):
         """
-        Vanilla UCRL2 based on "Jaksch, Thomas, Ronald Ortner, and Peter Auer. "Near-optimal regret bounds for reinforcement learning." Journal of Machine Learning Research 11.Apr (2010): 1563-1600."
-        :param n_states: the number of states
-        :param n_actions: the number of actions
-        :param delta:  confidence level in (0,1)
+        Vanilla UCRL2 based on "Jaksch, Thomas, Ronald Ortner, and Peter Auer. "Near-optimal regret bounds for reinforcement learning." Journal of Machine Learning Research 11.Apr (2010): 1563-1600.
         """
 
+        # Storing the parameters
         np.random.seed(seed=seed)
         self.prior_knowledge = prior_knowledge
         self.regulatory_constraints = regulatory_constraints
 
+        # Initialize counters
+        self.t = 1
+        self.vk = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=int,
+        ) #the state-action count for the current episode k
+        self.Nk = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=int,
+        ) #the state-action count prior to episode k
+        self.r_distances = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=float,
+        )
+        self.p_distances = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=float,
+        )
+        self.Pk = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions, self.prior_knowledge.n_states),
+            dtype=int,
+        )
+        self.Rk = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=float,
+        )
+        self.u = np.zeros(
+            shape=self.prior_knowledge.n_states,
+            dtype=float,
+        )
 
-        
+        # Misc initializations
         initial_state = self.prior_knowledge.tabularize(
             element=self.prior_knowledge.initial_state,
             space=self.prior_knowledge.state_space,
         )
-        self.observations = [[initial_state], [], []] # list of the observed (states, actions, rewards) ordered by time
-        self.vk = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions)) #the state-action count for the current episode k
-        self.Nk = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions)) #the state-action count prior to episode k
-        self.t = 1
-
-        self.r_distances = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions))
-        self.p_distances = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions))
-        self.Pk = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions, self.prior_knowledge.n_states))
-        self.Rk = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions))
-
-        self.u = np.zeros(self.prior_knowledge.n_states)
-        self.policy = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions)) # policy
+        self.last_state = initial_state
+        self.current_state = initial_state
+        self.policy = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=float,
+        ) # policy
         for s in range(self.prior_knowledge.n_states):
             S = self.prior_knowledge.detabularize(
                 tabular_element=s,
@@ -61,13 +85,17 @@ class DebugUcrl2Agt:
             for a in range(self.prior_knowledge.n_actions):
                 self.Nk[s, a] += self.vk[s, a]
 
+    # Auxiliary function to update v the accumulated state-action count.
+    def updatev(self):
+        self.vk[self.last_state, self.last_action] += 1
+
     # Auxiliary function to update R the accumulated reward.
     def updateR(self):
-        self.Rk[self.observations[0][-2], self.observations[1][-1]] += self.observations[2][-1]
+        self.Rk[self.last_state, self.last_action] += self.current_reward
 
     # Auxiliary function to update P the transitions count.
     def updateP(self):
-        self.Pk[self.observations[0][-2], self.observations[1][-1], self.observations[0][-1]] += 1
+        self.Pk[self.last_state, self.last_action, self.current_state] += 1
 
     # Auxiliary function updating the values of r_distances and p_distances (i.e. the confidence bounds used to build the set of plausible MDPs).
     def distances(self):
@@ -130,7 +158,7 @@ class DebugUcrl2Agt:
 
 
     # To start a new episode (init var, computes estmates and run EVI).
-    def new_episode(self):
+    def off_policy(self):
         self.updateN()
         self.vk = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions))
         r_estimate = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions))
@@ -145,41 +173,42 @@ class DebugUcrl2Agt:
         self.EVI(r_estimate, p_estimate, epsilon=1. / max(1, self.t))
 
 
-    def sample_action(self, previous_state):
-        state = self.prior_knowledge.tabularize(
-            element=previous_state,
+    def sample_action(self, state):
+        self.last_state = self.prior_knowledge.tabularize(
+            element=state,
             space=self.prior_knowledge.state_space,
         )
-        action = categorical_sample([self.policy[state, a] for a in range(self.prior_knowledge.n_actions)], np.random)
-        self.start_episode = np.nan
-        self.end_episode = np.nan
-        self.stopping = self.vk[state, action] >= max([1, self.Nk[state, action]])
-        if self.stopping:
-            self.new_episode()
-            action = categorical_sample([self.policy[state, a] for a in range(self.prior_knowledge.n_actions)], np.random)
-        self.previous_state = state
-        self.previous_action = action
+        assert self.last_state == self.current_state
+        self.last_action = categorical_sample([self.policy[self.last_state, a] for a in range(self.prior_knowledge.n_actions)], np.random)
+        self.new_episode = self.vk[self.last_state, self.last_action] >= max([1, self.Nk[self.last_state, self.last_action]])
+        self.off_policy_time = np.nan # Collecting data
+        if self.new_episode:
+            self.off_policy_time = perf_counter()
+            self.off_policy()
+            self.last_action = categorical_sample([self.policy[self.last_state, a] for a in range(self.prior_knowledge.n_actions)], np.random)
+        self.off_policy_time = perf_counter() - self.off_policy_time
         output = self.prior_knowledge.detabularize(
-            tabular_element=action,
+            tabular_element=self.last_action,
             space=self.prior_knowledge.action_space,
         )
         return output
 
     # To update the learner after one step of the current policy.
-    def update(self, current_state, reward, side_effects):
-        self.vk[self.previous_state, self.previous_action] += 1
-        state = self.prior_knowledge.tabularize(
-            element=current_state,
+    def update(self, state, reward, side_effects):
+        self.current_state = self.prior_knowledge.tabularize(
+            element=state,
             space=self.prior_knowledge.state_space,
         )
-        self.observations[0].append(state)
-        self.observations[1].append(self.previous_action)
-        self.observations[2].append(reward)
+        self.current_reward = reward
+        self.updatev()
         self.updateP()
         self.updateR()
         self.t += 1
 
+    # To get the data to save.
     def get_data(self):
-        data = {}
+        data = {
+            'off_policy_time': self.off_policy_time
+        }
         return data
 
