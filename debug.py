@@ -2,7 +2,7 @@ import os
 import gymnasium as gym
 
 from train import debug
-from agents import DebugUcrl2Agt
+from agents import Ucrl2Agt as Agt
 os.system('pip3 install -e gym-cellular -q')
 import gym_cellular
 
@@ -15,8 +15,8 @@ env = gym.make(
     config['gym_id'],
     **config,
 )
-agt = DebugUcrl2Agt(
-    seed=100,
+agt = Agt(
+    seed=99,
     prior_knowledge=env.prior_knowledge,
     regulatory_constraints='true',
 )
