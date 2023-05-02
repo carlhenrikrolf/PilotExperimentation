@@ -78,6 +78,8 @@ class Ucrl2Agt:
                 ):
                     self.policy[s, a] = 1.0
 
+        self.data = {}
+
 
     # Auxiliary function to update N the current state-action count.
     def updateN(self):
@@ -181,12 +183,12 @@ class Ucrl2Agt:
         assert self.last_state == self.current_state
         self.last_action = categorical_sample([self.policy[self.last_state, a] for a in range(self.prior_knowledge.n_actions)], np.random)
         self.new_episode = self.vk[self.last_state, self.last_action] >= max([1, self.Nk[self.last_state, self.last_action]])
-        self.off_policy_time = np.nan # Collecting data
+        self.data['off_policy_time'] = np.nan
         if self.new_episode:
-            self.off_policy_time = perf_counter()
+            self.data['off_policy_time'] = perf_counter()
             self.off_policy()
             self.last_action = categorical_sample([self.policy[self.last_state, a] for a in range(self.prior_knowledge.n_actions)], np.random)
-        self.off_policy_time = perf_counter() - self.off_policy_time
+        self.data['off_policy_time'] = perf_counter() - self.data['off_policy_time']
         output = self.prior_knowledge.detabularize(
             tabular_element=self.last_action,
             space=self.prior_knowledge.action_space,
@@ -207,8 +209,5 @@ class Ucrl2Agt:
 
     # To get the data to save.
     def get_data(self):
-        data = {
-            'off_policy_time': self.off_policy_time
-        }
-        return data
+        return self.data
 

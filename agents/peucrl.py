@@ -1,7 +1,7 @@
 """Copypasted and modified, cite"""
 
 from agents.utils import *
-from gym_cellular.envs.utils import generalized_cellular2tabular, generalized_tabular2cellular as cellular2tabular, tabular2cellular
+from gym_cellular.envs.utils import generalized_cellular2tabular as cellular2tabular, generalized_tabular2cellular as tabular2cellular
 
 import copy as cp
 import numpy as np
@@ -62,8 +62,8 @@ class PeUcrlAgt:
         )
         self.last_cellular_state = initial_cellular_state
         initial_tabular_state = cellular2tabular(
-            cellular_state=initial_cellular_state,
-            space=self.prior_knowledge.state_space,
+            initial_cellular_state,
+            self.prior_knowledge.state_space,
         )
         self.last_tabular_state = initial_tabular_state
         self.current_tabular_state = initial_tabular_state
@@ -82,6 +82,8 @@ class PeUcrlAgt:
                 space=self.prior_knowledge.action_space,
             )
 
+        self.data = {}
+
 
     # Auxiliary function to update N the current state-action count.
     def updateN(self):
@@ -91,15 +93,15 @@ class PeUcrlAgt:
 
     # Auxiliary function to update v the accumulated state-action count.
     def updatev(self):
-        self.vk[self.last_state, self.last_action] += 1
+        self.vk[self.last_tabular_state, self.last_tabular_action] += 1
 
     # Auxiliary function to update R the accumulated reward.
     def updateR(self):
-        self.Rk[self.last_state, self.last_action] += self.current_reward
+        self.Rk[self.last_tabular_state, self.last_tabular_action] += self.current_reward
 
     # Auxiliary function to update P the transitions count.
     def updateP(self):
-        self.Pk[self.last_state, self.last_action, self.current_state] += 1
+        self.Pk[self.last_tabular_state, self.last_tabular_action, self.current_tabular_state] += 1
 
     # Auxiliary function updating the values of r_distances and p_distances (i.e. the confidence bounds used to build the set of plausible MDPs).
     def distances(self):
@@ -145,7 +147,11 @@ class PeUcrlAgt:
                 nn = [-self.Nk[s, a] for a in arg]
                 (nmax, arg2) = allmax(nn)
                 choice = [arg[a] for a in arg2]
-                self.policy[s] = [1. / len(choice) if x in choice else 0 for x in range(self.prior_knowledge.n_actions)]
+                sampled_cellular_action = tabular2cellular(
+                    np.random.choice(choice),
+                    self.prior_knowledge.action_space,
+                )
+                self.policy[:, s] = cp.copy(sampled_cellular_action)
 
             diff = [abs(x - y) for (x, y) in zip(u1, u0)]
             if (max(diff) - min(diff)) < epsilon:
@@ -164,9 +170,18 @@ class PeUcrlAgt:
     # To start a new episode (init var, computes estmates and run EVI).
     def off_policy(self):
         self.updateN()
-        self.vk = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions))
-        r_estimate = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions))
-        p_estimate = np.zeros((self.prior_knowledge.n_states, self.prior_knowledge.n_actions, self.prior_knowledge.n_states))
+        self.vk = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=int,
+        )
+        r_estimate = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=float,
+        )
+        p_estimate = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions, self.prior_knowledge.n_states),
+            dtype=float,
+        )
         for s in range(self.prior_knowledge.n_states):
             for a in range(self.prior_knowledge.n_actions):
                 div = max([1, self.Nk[s, a]])
@@ -183,26 +198,26 @@ class PeUcrlAgt:
             space=self.prior_knowledge.state_space,
         )
         self.last_tabular_state = cellular2tabular(
-            cellular_element=self.last_cellular_state,
-            space=self.prior_knowledge.state_space,
+            self.last_cellular_state,
+            self.prior_knowledge.state_space,
         )
         assert self.last_tabular_state == self.current_tabular_state
         self.last_cellular_action = cp.copy(self.policy[:, self.last_tabular_state])
         self.last_tabular_action = cellular2tabular(
-            cellular_element=self.last_cellular_action,
-            space=self.prior_knowledge.action_space,
+            self.last_cellular_action,
+            self.prior_knowledge.action_space,
         )
         self.new_episode = self.vk[self.last_tabular_state, self.last_tabular_action] >= max([1, self.Nk[self.last_tabular_state, self.last_tabular_action]])
-        self.off_policy_time = np.nan # Collecting data
+        self.data['off_policy_time'] = np.nan
         if self.new_episode:
-            self.off_policy_time = perf_counter()
+            self.data['off_policy_time'] = perf_counter()
             self.off_policy()
             self.last_cellular_action = cp.copy(self.policy[:, self.last_tabular_state])
             self.last_tabular_action = cellular2tabular(
-                cellular_element=self.last_cellular_action,
-                space=self.prior_knowledge.action_space,
+                self.last_cellular_action,
+                self.prior_knowledge.action_space,
             )
-        self.off_policy_time = perf_counter() - self.off_policy_time
+        self.data['off_policy_time'] = perf_counter() - self.data['off_policy_time']
         output = self.prior_knowledge.decellularize(
             cellular_element=self.last_cellular_action,
             space=self.prior_knowledge.action_space,
@@ -211,9 +226,13 @@ class PeUcrlAgt:
 
     # To update the learner after one step of the current policy.
     def update(self, state, reward, side_effects):
-        self.current_state = self.prior_knowledge.tabularize(
+        self.current_cellular_state = self.prior_knowledge.cellularize(
             element=state,
             space=self.prior_knowledge.state_space,
+        )
+        self.current_tabular_state = cellular2tabular(
+            self.current_cellular_state,
+            self.prior_knowledge.state_space,
         )
         self.current_reward = reward
         self.updatev()
@@ -223,8 +242,5 @@ class PeUcrlAgt:
 
     # To get the data to save.
     def get_data(self):
-        data = {
-            'off_policy_time': self.off_policy_time
-        }
-        return data
+        return self.data
 
