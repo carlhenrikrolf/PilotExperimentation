@@ -5,8 +5,6 @@ from gym_cellular.envs.utils import generalized_cellular2tabular as cellular2tab
 
 import copy as cp
 import numpy as np
-import os
-import subprocess
 from time import perf_counter
 
 class PeUcrlAgt:
@@ -83,11 +81,6 @@ class PeUcrlAgt:
                 element=A,
                 space=self.prior_knowledge.action_space,
             )
-        self.policy_update = np.zeros(
-            shape=self.prior_knowledge.n_cells,
-            dtype=int,
-        )
-        self.side_effects_funcs = [{'safe', 'unsafe'}] * self.prior_knowledge.n_intracellular_states
 
         self.data = {}
 
@@ -196,10 +189,7 @@ class PeUcrlAgt:
                 for next_s in range(self.prior_knowledge.n_states):
                     p_estimate[s, a, next_s] = self.Pk[s, a, next_s] / div
         self.distances()
-        behaviour_policy = cp.copy(self.policy)
         self.EVI(r_estimate, p_estimate, epsilon=1. / max(1, self.t))
-        target_policy = cp.copy(self.policy)
-        self.pe_shield(behaviour_policy, target_policy, p_estimate)
 
 
     def sample_action(self, state):
@@ -245,160 +235,10 @@ class PeUcrlAgt:
             self.prior_knowledge.state_space,
         )
         self.current_reward = reward
-        self.side_effects_processing(side_effects)
         self.updatev()
         self.updateP()
         self.updateR()
         self.t += 1
-
-    # Registering new side effects
-    def side_effects_processing(self, side_effects):
-
-        for reporting_cell in range(self.prior_knowledge.n_cells):
-            for reported_cell in range(self.prior_knowledge.n_cells):
-                current_intracellular_state = self.current_cellular_state[reported_cell]
-                if side_effects[reporting_cell, reported_cell] == 'safe':
-                    self.side_effects_funcs[current_intracellular_state] -= {'unsafe'}
-                elif side_effects[reporting_cell, reported_cell] == 'unsafe':
-                    self.side_effects_funcs[current_intracellular_state] -= {'safe'}
-
-    # Applying shielding
-    def pe_shield(self, behaviour_policy, target_policy, p_estimate):
-        
-        tmp_policy = cp.copy(behaviour_policy)
-        cell_set = set(range(self.prior_knowledge.n_cells))
-        while len(cell_set) >= 1:
-            cell = np.random.choice(list(cell_set))
-            cell_set -= {cell}
-            tmp_policy[cell, :] = cp.copy(target_policy[cell, :])
-            if self.policy_update[cell] == 0:
-                initial_policy_is_updated = True
-                self.policy_update[cell] = 1
-            else:
-                initial_policy_is_updated = False
-            verified = self.verify_with_prism(tmp_policy, p_estimate)
-            if not verified:
-                tmp_policy[cell, :] = cp.copy(behaviour_policy[cell, :])
-                if initial_policy_is_updated:
-                    self.policy_update[cell] = 0
-        self.policy = cp.copy(tmp_policy)
-
-    # Prism
-    def verify_with_prism(
-        self,
-        tmp_policy,
-        p_estimate,
-    ):
-        
-        # initialise prism
-        tmp_id = np.random.randint(0, 1000000)
-        self.prism_path = 'agents/prism_files/tmp_' + str(tmp_id) + '/'
-        try:
-            os.mkdir(self.prism_path)
-        except FileExistsError:
-            print("Error: Cannot create folder. Clean 'agents/prism_files/' folder.")
-        with open(self.prism_path + 'constraints.props', 'a') as props_file:
-            props_file.write(self.regulatory_constraints)
-
-        # write model file
-        self.write_model_file(tmp_policy, p_estimate)
-
-        # verify
-        try:
-            output = subprocess.check_output(['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props'])
-        except subprocess.CalledProcessError as error:
-            print(error.output.decode())
-            raise ValueError('Prism returned an error, see above.')
-        output = output.decode()
-        occurances = 0
-        for line in output.splitlines():
-            if 'Result:' in line:
-                occurances += 1
-                if 'true' in line:
-                    verified = True
-                elif 'false' in line:
-                    verified = False
-                else:
-                    raise ValueError('Verification returned non-Boolean result.')
-        if occurances != 1:
-            raise ValueError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
-        self.prism_output = output # for debugging purposes
-
-        # clean
-        os.system('rm -r -f ' + self.prism_path)
-
-        return verified
-    
-    def write_model_file(
-            self,
-            tmp_policy,
-            p_estimate,
-            epsilon: float = 0.000000000000001,
-        ):
-        
-        os.system('rm -fr ' + self.prism_path + 'model.prism')
-        with open(self.prism_path + 'model.prism', 'a') as prism_file:
-
-            prism_file.write('dtmc\n\n')
-
-            for s in range(self.prior_knowledge.n_states):
-                for cell in range(self.prior_knowledge.n_cells):
-                    C = 0
-                    if self.policy_update[cell] == 1:
-                        state = tabular2cellular(
-                            s,
-                            self.prior_knowledge.state_space,
-                        )
-                        for si in state:
-                            if 'unsafe' in self.side_effects_funcs[si]:
-                                C = 1
-                                break
-                    prism_file.write('const int C' + str(s) + '_' + str(cell) + ' = ' + str(C) + ';\n')
-            prism_file.write('\n')
-
-            prism_file.write('module M\n\n')
-
-            prism_file.write('s : [0..' + str(self.prior_knowledge.n_states) + '] init ' + str(self.last_tabular_state) + ';\n')
-            for cell in range(self.prior_knowledge.n_cells):
-                prism_file.write('c_' + str(cell) + ' : [0..1] init C' + str(self.last_tabular_state) + '_' + str(cell) + ';\n')
-            prism_file.write('\n')
-
-            for s in range(self.prior_knowledge.n_states):
-                prism_file.write('[] (s = ' + str(s) + ') -> ')
-                a = cellular2tabular(
-                    tmp_policy[:, s], 
-                    self.prior_knowledge.action_space,
-                )
-                init_iter = True
-                for next_s in range(self.prior_knowledge.n_states):
-                    lb = max(
-                        [epsilon,
-                         p_estimate[s, a, next_s] - self.p_distances[s, a]]
-                    )
-                    ub = min(
-                        [1-epsilon,
-                         p_estimate[s, a, next_s] + self.p_distances[s, a]]
-                    )
-                    if not init_iter:
-                        prism_file.write(' + ')
-                    prism_file.write('[' + str(lb) + ',' + str(ub) + "] : (s' = " + str(next_s) + ')')
-                    for cell in range(self.prior_knowledge.n_cells):
-                        prism_file.write(' & (c_' + str(cell) + "' = C" + str(next_s) + '_' + str(cell) + ')')
-                    init_iter = False
-                prism_file.write(';\n')
-            prism_file.write('\n')
-
-            prism_file.write('endmodule\n\n')
-
-            prism_file.write("formula n = ")
-            for cell in range(self.prior_knowledge.n_cells):
-                prism_file.write("c_" + str(cell)+ " + ")
-            prism_file.write("0;\n")
-            for count, cell_class in enumerate(self.prior_knowledge.cell_classes):
-                prism_file.write("formula n_" + cell_class + " = ")
-                for cell in self.prior_knowledge.cell_labelling_function[count]:
-                    prism_file.write("c_" + str(cell) + " + ")
-                prism_file.write("0;\n")
 
     # To get the data to save.
     def get_data(self):

@@ -1,4 +1,5 @@
 import os
+import pickle as pkl
 
 def debug(
     path: str,
@@ -15,12 +16,9 @@ def debug(
         action = agt.sample_action(state)
         state, reward, terminated, truncated, info = env.step(action)
         agt.update(state, reward, info['side_effects'])
-        save_data(
-            path,
-            time_step=t,
-            env=env.get_data(),
-            agt=agt.get_data(),
-        )
+        save_data(path,time_step=t,env=env.get_data(),agt=agt.get_data())
+        if (t + 1) % 1000 == 0:
+            backup(path,env,agt)
 
 
 def save_data(
@@ -48,4 +46,16 @@ def save_data(
             data_file.write(str(env['reward']) + ',')
             data_file.write(str(env['side_effects_incidence']) + ',')
             data_file.write(str(agt['off_policy_time']) + '\n')
+
+def backup(path,env,agt):
+    with open(path + 'tmp_backup.pkl', 'wb') as backup_file:
+        pkl.dump(
+            {
+                'env': env,
+                'agt': agt,
+            },
+            backup_file,
+        )
+    os.system('cp -f ' + path + 'tmp_backup.pkl ' + path + 'backup.pkl')
+    os.system('rm ' + path + 'tmp_backup.pkl')
 
