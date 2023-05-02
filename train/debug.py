@@ -33,7 +33,7 @@ def save_data(
         try:
             os.mkdir(path)
         except FileExistsError:
-            print("Error: Data directory '" + path + "' already exists. As a safety mechanism you are required to move it or delete it before running this script again.")
+            raise RuntimeError("Data directory '" + path + "' already exists. As a safety mechanism you are required to move it or delete it before running this script again.")
         with open(path + 'data.csv', 'a') as data_file:
             data_file.write('time step,')
             data_file.write('reward,')

@@ -63,13 +63,13 @@ class PeUcrlAgt:
             space=self.prior_knowledge.state_space,
         )
         self.last_cellular_state = initial_cellular_state
-        initial_tabular_state = cellular2tabular(
+        self.initial_tabular_state = cellular2tabular(
             initial_cellular_state,
             self.prior_knowledge.state_space,
         )
-        self.last_tabular_state = initial_tabular_state
-        self.current_tabular_state = initial_tabular_state
-        self.policy = np.zeros(
+        self.last_tabular_state = cp.copy(self.initial_tabular_state)
+        self.current_tabular_state = cp.copy(self.initial_tabular_state)
+        self.initial_policy = np.zeros(
             shape=(self.prior_knowledge.n_cells, self.prior_knowledge.n_states),
             dtype=int,
         ) # policy
@@ -79,10 +79,11 @@ class PeUcrlAgt:
                 space=self.prior_knowledge.state_space
             )
             A = self.prior_knowledge.initial_policy(S)
-            self.policy[:, s] = self.prior_knowledge.cellularize(
+            self.initial_policy[:, s] = self.prior_knowledge.cellularize(
                 element=A,
                 space=self.prior_knowledge.action_space,
             )
+        self.policy = cp.copy(self.initial_policy)
         self.policy_update = np.zeros(
             shape=self.prior_knowledge.n_cells,
             dtype=int,
@@ -263,24 +264,29 @@ class PeUcrlAgt:
                     self.side_effects_funcs[current_intracellular_state] -= {'safe'}
 
     # Applying shielding
-    def pe_shield(self, behaviour_policy, target_policy, p_estimate):
+    def pe_shield(self, behaviour_policy, target_policy, p_estimate, epsilon=0.8):
         
         tmp_policy = cp.copy(behaviour_policy)
         cell_set = set(range(self.prior_knowledge.n_cells))
         while len(cell_set) >= 1:
             cell = np.random.choice(list(cell_set))
             cell_set -= {cell}
-            tmp_policy[cell, :] = cp.copy(target_policy[cell, :])
-            if self.policy_update[cell] == 0:
-                initial_policy_is_updated = True
-                self.policy_update[cell] = 1
+            random_reset = np.random.rand() <= epsilon and self.current_tabular_state == self.initial_tabular_state and self.policy_update[cell] == 1
+            if random_reset: # increase exploration
+                tmp_policy[cell, :] = cp.copy(self.initial_policy[cell, :])
+                self.policy_update[cell] = 0
             else:
-                initial_policy_is_updated = False
-            verified = self.verify_with_prism(tmp_policy, p_estimate)
-            if not verified:
-                tmp_policy[cell, :] = cp.copy(behaviour_policy[cell, :])
-                if initial_policy_is_updated:
-                    self.policy_update[cell] = 0
+                tmp_policy[cell, :] = cp.copy(target_policy[cell, :])
+                if self.policy_update[cell] == 0:
+                    initial_policy_is_updated = True
+                    self.policy_update[cell] = 1
+                else:
+                    initial_policy_is_updated = False
+                verified = self.verify_with_prism(tmp_policy, p_estimate)
+                if not verified:
+                    tmp_policy[cell, :] = cp.copy(behaviour_policy[cell, :])
+                    if initial_policy_is_updated:
+                        self.policy_update[cell] = 0
         self.policy = cp.copy(tmp_policy)
 
     # Prism
