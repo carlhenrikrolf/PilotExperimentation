@@ -21,7 +21,7 @@ env_config = {
 config = {
     'env': env_config,
     'agt': PeUcrlAgt,
-    'seed': 6,
+    'seed': 695,
     'regulatory_constraints': 'P>=0.8 [ F<=5 n <= 1]',
     'max_n_time_steps': 500000,
 }

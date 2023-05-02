@@ -15,7 +15,7 @@ class PeUcrlAgt:
         self,
         seed,
         prior_knowledge,
-        regulatory_constraints='true',
+        regulatory_constraints,
     ):
         """
         Implementation of PeUcrl.
@@ -36,10 +36,6 @@ class PeUcrlAgt:
             shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
             dtype=int,
         ) #the state-action count prior to episode k
-        self.r_distances = np.zeros(
-            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
-            dtype=float,
-        )
         self.p_distances = np.zeros(
             shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
             dtype=float,
@@ -48,14 +44,37 @@ class PeUcrlAgt:
             shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions, self.prior_knowledge.n_states),
             dtype=int,
         )
-        self.Rk = np.zeros(
-            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
-            dtype=float,
-        )
         self.u = np.zeros(
             shape=self.prior_knowledge.n_states,
             dtype=float,
         )
+        if hasattr(prior_knowledge, 'reward_func'):
+            self.reward_func = np.zeros(
+                shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+                dtype=float,
+            )
+            for s in range(self.prior_knowledge.n_states):
+                for a in range(self.prior_knowledge.n_actions):
+                    self.reward_func[s, a] = self.prior_knowledge.reward_func(
+                        state=self.prior_knowledge.detabularize(
+                            s,
+                            self.prior_knowledge.state_space,
+                        ),
+                        action=self.prior_knowledge.detabularize(
+                            a,
+                            self.prior_knowledge.action_space,
+                        ),
+                        next_state=(0, 0), # this needs to change
+                    )
+        self.r_distances = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=float,
+        )
+        self.Rk = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=float,
+        )
+
 
         # Misc initializations
         initial_cellular_state = self.prior_knowledge.cellularize(
@@ -148,7 +167,11 @@ class PeUcrlAgt:
                 temp = np.zeros(self.prior_knowledge.n_actions)
                 for a in range(self.prior_knowledge.n_actions):
                     max_p = self.max_proba(p_estimate, sorted_indices, s, a)
-                    temp[a] = min((1, r_estimate[s, a] + self.r_distances[s, a])) + sum(
+                    if hasattr(self.prior_knowledge, 'reward_func'):
+                        optimistic_reward = self.reward_func[s, a]
+                    else:
+                        optimistic_reward = min((1, r_estimate[s, a] + self.r_distances[s, a]))
+                    temp[a] = optimistic_reward + sum(
                         [u * p for (u, p) in zip(u0, max_p)])
                 # This implements a tie-breaking rule by choosing:  Uniform(Argmmin(Nk))
                 (u1[s], arg) = allmax(temp)
@@ -271,22 +294,22 @@ class PeUcrlAgt:
         while len(cell_set) >= 1:
             cell = np.random.choice(list(cell_set))
             cell_set -= {cell}
-            random_reset = np.random.rand() <= epsilon and self.current_tabular_state == self.initial_tabular_state and self.policy_update[cell] == 1
-            if random_reset: # increase exploration
-                tmp_policy[cell, :] = cp.copy(self.initial_policy[cell, :])
-                self.policy_update[cell] = 0
+            # random_reset = np.random.rand() <= epsilon and self.current_tabular_state == self.initial_tabular_state and self.policy_update[cell] == 1
+            # if random_reset: # increase exploration
+            #     tmp_policy[cell, :] = cp.copy(self.initial_policy[cell, :])
+            #     self.policy_update[cell] = 0
+            # else:
+            tmp_policy[cell, :] = cp.copy(target_policy[cell, :])
+            if self.policy_update[cell] == 0:
+                initial_policy_is_updated = True
+                self.policy_update[cell] = 1
             else:
-                tmp_policy[cell, :] = cp.copy(target_policy[cell, :])
-                if self.policy_update[cell] == 0:
-                    initial_policy_is_updated = True
-                    self.policy_update[cell] = 1
-                else:
-                    initial_policy_is_updated = False
-                verified = self.verify_with_prism(tmp_policy, p_estimate)
-                if not verified:
-                    tmp_policy[cell, :] = cp.copy(behaviour_policy[cell, :])
-                    if initial_policy_is_updated:
-                        self.policy_update[cell] = 0
+                initial_policy_is_updated = False
+            verified = self.verify_with_prism(tmp_policy, p_estimate)
+            if not verified:
+                tmp_policy[cell, :] = cp.copy(behaviour_policy[cell, :])
+                if initial_policy_is_updated:
+                    self.policy_update[cell] = 0
         self.policy = cp.copy(tmp_policy)
 
     # Prism
