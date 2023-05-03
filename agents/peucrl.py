@@ -107,7 +107,7 @@ class PeUcrlAgt:
             shape=self.prior_knowledge.n_cells,
             dtype=int,
         )
-        self.side_effects_funcs = [{'safe', 'unsafe'}] * self.prior_knowledge.n_intracellular_states
+        self.side_effects_funcs = [{'safe', 'unsafe'} for _ in range(self.prior_knowledge.n_intracellular_states)]
 
         self.data = {}
 
@@ -280,11 +280,11 @@ class PeUcrlAgt:
 
         for reporting_cell in range(self.prior_knowledge.n_cells):
             for reported_cell in range(self.prior_knowledge.n_cells):
-                current_intracellular_state = self.current_cellular_state[reported_cell]
+                reported_current_intracellular_state = self.current_cellular_state[reported_cell]
                 if side_effects[reporting_cell, reported_cell] == 'safe':
-                    self.side_effects_funcs[current_intracellular_state] -= {'unsafe'}
+                    self.side_effects_funcs[reported_current_intracellular_state] -= {'unsafe'}
                 elif side_effects[reporting_cell, reported_cell] == 'unsafe':
-                    self.side_effects_funcs[current_intracellular_state] -= {'safe'}
+                    self.side_effects_funcs[reported_current_intracellular_state] -= {'safe'}
 
     # Applying shielding
     def pe_shield(self, behaviour_policy, target_policy, p_estimate, epsilon=0.8):

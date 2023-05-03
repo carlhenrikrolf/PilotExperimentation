@@ -23,7 +23,7 @@ config = {
     'agt': PeUcrlAgt,
     'seed': 695,
     'regulatory_constraints': 'P>=0.8 [ F<=5 n <= 1]',
-    'max_n_time_steps': 500000,
+    'max_n_time_steps': 5000,
 }
 
 env = gym.make(
