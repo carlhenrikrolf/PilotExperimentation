@@ -107,27 +107,7 @@ class PeUcrlAgt:
             shape=self.prior_knowledge.n_cells,
             dtype=int,
         )
-        self.rc = [0.0] * self.prior_knowledge.n_cells
         self.side_effects_funcs = [{'safe', 'unsafe'} for _ in range(self.prior_knowledge.n_intracellular_states)]
-        self.initial_safe_intracellular_states = set()
-        for state in self.prior_knowledge.initial_safe_states:
-            cellular_state = self.prior_knowledge.cellularize(
-                element=state,
-                space=self.prior_knowledge.state_space,
-            )
-            for intracellular_state in cellular_state:
-                self.side_effects_funcs[intracellular_state] -= {'unsafe'}
-                self.initial_safe_intracellular_states.add(intracellular_state)
-        self.new_pruning = False
-        self.intracellular_transition_indicator = np.ones(
-            shape=(self.prior_knowledge.n_intracellular_states, self.prior_knowledge.n_intracellular_actions),
-            dtype=int,
-        )
-        self.transition_indicator = np.ones(
-            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
-            dtype=int,
-        )
-        self.path = [set() for _ in range(self.prior_knowledge.n_cells)]
 
         self.data = {}
 
@@ -193,10 +173,9 @@ class PeUcrlAgt:
                         optimistic_reward = min((1, r_estimate[s, a] + self.r_distances[s, a]))
                     temp[a] = optimistic_reward + sum(
                         [u * p for (u, p) in zip(u0, max_p)])
-                    temp[a] *= self.transition_indicator[s, a]
                 # This implements a tie-breaking rule by choosing:  Uniform(Argmmin(Nk))
                 (u1[s], arg) = allmax(temp)
-                nn = [-self.Nk[s, a] if self.transition_indicator[s,a]==1 else -np.inf for a in arg]
+                nn = [-self.Nk[s, a] for a in arg]
                 (nmax, arg2) = allmax(nn)
                 choice = [arg[a] for a in arg2]
                 sampled_cellular_action = tabular2cellular(
@@ -221,12 +200,11 @@ class PeUcrlAgt:
 
     # To start a new episode (init var, computes estmates and run EVI).
     def off_policy(self):
-        if self.new_episode and not self.new_pruning:
-            self.updateN()
-            self.vk = np.zeros(
-                shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
-                dtype=int,
-            )
+        self.updateN()
+        self.vk = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=int,
+        )
         r_estimate = np.zeros(
             shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
             dtype=float,
@@ -265,8 +243,7 @@ class PeUcrlAgt:
         )
         self.new_episode = self.vk[self.last_tabular_state, self.last_tabular_action] >= max([1, self.Nk[self.last_tabular_state, self.last_tabular_action]])
         self.data['off_policy_time'] = np.nan
-        self.data['updated_cells'] = ''
-        if self.new_episode or self.new_pruning:
+        if self.new_episode:
             self.data['off_policy_time'] = perf_counter()
             self.off_policy()
             self.last_cellular_action = cp.copy(self.policy[:, self.last_tabular_state])
@@ -293,7 +270,6 @@ class PeUcrlAgt:
         )
         self.current_reward = reward
         self.side_effects_processing(side_effects)
-        self.action_pruning()
         self.updatev()
         self.updateP()
         self.updateR()
@@ -310,73 +286,30 @@ class PeUcrlAgt:
                 elif side_effects[reporting_cell, reported_cell] == 'unsafe':
                     self.side_effects_funcs[reported_current_intracellular_state] -= {'safe'}
 
-    # Action pruning
-    def action_pruning(self):
-
-        # initialization
-        self.new_pruning = False
-        # basic case
-        for cell in range(self.prior_knowledge.n_cells):
-            if self.side_effects_funcs[self.current_cellular_state[cell]] == {'unsafe'}:
-                if self.intracellular_transition_indicator[self.last_cellular_state[cell], self.last_cellular_action[cell]] == 1:
-                    self.new_pruning = True
-                self.intracellular_transition_indicator[self.last_cellular_state[cell], self.last_cellular_action[cell]] = 0
-        # corner cases
-        for cell in range(self.prior_knowledge.n_cells):
-            n_unpruned_actions = np.sum(self.intracellular_transition_indicator[self.last_cellular_state[cell], :])
-            if n_unpruned_actions >= 2:
-                self.path[cell] = set()
-            elif n_unpruned_actions == 1:
-                self.path[cell].add((self.last_cellular_state[cell], self.last_cellular_action[cell]))
-            if self.side_effects_funcs[self.current_cellular_state[cell]] == {'unsafe'} or n_unpruned_actions == 0:
-                for (si, ai) in self.path[cell]:
-                    if self.intracellular_transition_indicator[si, ai] == 1:
-                        self.new_pruning = True
-                    self.intracellular_transition_indicator[si, ai] = 0
-        # update transition indicators
-        if self.new_pruning:
-            for s in range(self.prior_knowledge.n_states):
-                for a in range(self.prior_knowledge.n_actions):
-                    for si, ai in zip(
-                            tabular2cellular(s, self.prior_knowledge.state_space),
-                            tabular2cellular(a, self.prior_knowledge.action_space)
-                        ):
-                        if self.intracellular_transition_indicator[si, ai] == 0:
-                            self.transition_indicator[s, a] = 0
-                            break
-
-
     # Applying shielding
-    def pe_shield(self, behaviour_policy, target_policy, p_estimate):
+    def pe_shield(self, behaviour_policy, target_policy, p_estimate, epsilon=0.8):
         
         tmp_policy = cp.copy(behaviour_policy)
         cell_set = set(range(self.prior_knowledge.n_cells))
         while len(cell_set) >= 1:
             cell = np.random.choice(list(cell_set))
             cell_set -= {cell}
-            reset = self.policy_update[cell] == 1
-            reset = (self.last_cellular_state[cell] in self.initial_safe_intracellular_states) and reset
-            if reset:
-                self.rc[cell] += 1.0
-            reset = (np.random.rand() <= 1.0 / max([1.0, self.rc[cell]])) and reset
-            if reset:
-                tmp_policy[cell, :] = cp.copy(self.initial_policy[cell, :])
-                self.policy_update[cell] = 0
-                self.data['updated_cells'] = self.data['updated_cells'] + '(' + str(cell) + ')' + '|'
+            # random_reset = np.random.rand() <= epsilon and self.current_tabular_state == self.initial_tabular_state and self.policy_update[cell] == 1
+            # if random_reset: # increase exploration
+            #     tmp_policy[cell, :] = cp.copy(self.initial_policy[cell, :])
+            #     self.policy_update[cell] = 0
+            # else:
+            tmp_policy[cell, :] = cp.copy(target_policy[cell, :])
+            if self.policy_update[cell] == 0:
+                initial_policy_is_updated = True
+                self.policy_update[cell] = 1
             else:
-                tmp_policy[cell, :] = cp.copy(target_policy[cell, :])
-                if self.policy_update[cell] == 0:
-                    initial_policy_is_updated = True
-                    self.policy_update[cell] = 1
-                else:
-                    initial_policy_is_updated = False
-                verified = self.verify_with_prism(tmp_policy, p_estimate)
-                if not verified:
-                    tmp_policy[cell, :] = cp.copy(behaviour_policy[cell, :])
-                    if initial_policy_is_updated:
-                        self.policy_update[cell] = 0
-                else:
-                    self.data['updated_cells'] = self.data['updated_cells'] + str(cell) + '|'
+                initial_policy_is_updated = False
+            verified = self.verify_with_prism(tmp_policy, p_estimate)
+            if not verified:
+                tmp_policy[cell, :] = cp.copy(behaviour_policy[cell, :])
+                if initial_policy_is_updated:
+                    self.policy_update[cell] = 0
         self.policy = cp.copy(tmp_policy)
 
     # Prism
@@ -498,16 +431,5 @@ class PeUcrlAgt:
 
     # To get the data to save.
     def get_data(self):
-        if np.isnan(self.data['off_policy_time']):
-            self.data['off_policy_time'] = ''
-        if self.new_episode and self.new_pruning:
-            self.data['update_kinds'] = 'both'
-        elif self.new_episode:
-            self.data['update_kinds'] = 'episode'
-        elif self.new_pruning:
-            self.data['update_kinds'] = 'pruning'
-        else:
-            self.data['update_kinds'] = ''
-        self.data['updated_cells'] = self.data['updated_cells'][:-1]
         return self.data
 

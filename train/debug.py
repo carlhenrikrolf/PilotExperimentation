@@ -13,11 +13,14 @@ def debug(
 
     for t in range(max_n_time_steps):
 
+        if state==(0,1):
+            print('the state!')
+
         action = agt.sample_action(state)
         state, reward, terminated, truncated, info = env.step(action)
         agt.update(state, reward, info['side_effects'])
         save_data(path,time_step=t,env=env.get_data(),agt=agt.get_data())
-        if (t + 1) % 1000 == 0:
+        if (t + 1) % 1000 == 0 or t == max_n_time_steps - 1:
             backup(path,env,agt)
 
 
@@ -38,14 +41,18 @@ def save_data(
             data_file.write('time step,')
             data_file.write('reward,')
             data_file.write('side effects incidence,')
-            data_file.write('off policy time\n')
+            data_file.write('off policy time,')
+            data_file.write('updated cells,')
+            data_file.write('update kinds\n')
     else:
         assert time_step is not None and env is not None and agt is not None
         with open(path + 'data.csv', 'a') as data_file:
-            data_file.write(str(time_step) + ',')
+            data_file.write('{:g},'.format(time_step))
             data_file.write(str(env['reward']) + ',')
             data_file.write(str(env['side_effects_incidence']) + ',')
-            data_file.write(str(agt['off_policy_time']) + '\n')
+            data_file.write(str(agt['off_policy_time']) + ',')
+            data_file.write(str(agt['updated_cells']) + ',')
+            data_file.write(str(agt['update_kinds']) + '\n')
 
 def backup(path,env,agt):
     with open(path + 'tmp_backup.pkl', 'wb') as backup_file:
