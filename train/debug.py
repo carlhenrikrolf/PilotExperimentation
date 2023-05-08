@@ -19,7 +19,7 @@ def debug(
         action = agt.sample_action(state)
         state, reward, terminated, truncated, info = env.step(action)
         agt.update(state, reward, info['side_effects'])
-        save_data(path,time_step=t,env=env.get_data(),agt=agt.get_data())
+        save_data(path,time_step=t+1,env=env.get_data(),agt=agt.get_data())
         if (t + 1) % 1000 == 0 or t == max_n_time_steps - 1:
             backup(path,env,agt)
 
