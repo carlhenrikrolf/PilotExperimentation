@@ -1,32 +1,25 @@
-"""This script runs an exploring reinforcement learning agent in a specified environments. All specifications for the experiments should be given as a .json file. The path to that file is used as input to this script. Further the name of the output subdirectory in .data/ should be given as the second argument."""
+# argument
+config_module = 'convergence_debug'
 
-# settings
-render = False
-debugger = True
+# import modules
+from utils.train import instantiate, initialize_save, train
+from importlib import import_module
 
-# load modules
-from utils import train
+# import config
+config_module = 'configs.' + config_module
+config = import_module(config_module).config
 
-from os import system
-from sys import argv
-from time import sleep
-
-system('pip3 install -e gym-cellular -q')
-
-# get arguments
-agent_id = argv[1]
-config_file_name = argv[2]
-experiment_dir = argv[3]
-
-# perform training
-if debugger:
-    sleep(5) # get time to attach debugger
-
+# train
+try:
+    path = 'results/' + config['super_dir'] + config['dir']
+except KeyError:
+    path = 'results/' + config['dir']
+env, agt = instantiate(config)
+max_n_time_steps = config['max_n_time_steps']
+initialize_save(path)
 train(
-    agent_id=agent_id,
-    config_file_name=config_file_name,
-    experiment_dir=experiment_dir,
-    render=render,
+    path,
+    env,
+    agt,
+    max_n_time_steps,
 )
-
-

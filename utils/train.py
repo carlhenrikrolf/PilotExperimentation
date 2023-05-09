@@ -1,164 +1,83 @@
-# import modules
 import gymnasium as gym
-from json import load, dumps
-from numpy import nan
-from os import system
-import pickle
-from pprint import pprint
-from sys import stdout
+import os
+import pickle as pkl
 
-from agents.utils import cellular2tabular
+def instantiate(config):
+
+    os.system('pip3 install -e gym-cellular -q')
+    import gym_cellular
+    env = gym.make(
+        *config['env']['args'],
+        **config['env']['kwargs'],
+    )
+    agt = config['agt'](
+        seed=config['seed'],
+        prior_knowledge=env.prior_knowledge,
+        regulatory_constraints=config['regulatory_constraints'],
+    )
+    return env, agt
+
 
 def train(
-    agent_id: str,
-    config_file_name: str,
-    experiment_dir: str,
-    render=False,
-    quiet=False,
+    path: str,
+    env,
+    agt,
+    max_n_time_steps: int 
 ):
 
-    # define output directory
-    if experiment_dir[-1] != '/':
-        experiment_dir = experiment_dir + '/'
-    experiment_path = 'results/' + experiment_dir
-    system('mkdir ' + experiment_path)
-
-    # save commits
-    system('touch ' + experiment_path + 'commits.txt')
-    system('printf "PilotExperimentation\n\n" >> ' + experiment_path + 'commits.txt')
-    system('git log -n 1 >> ' + experiment_path + 'commits.txt')
-    system('printf "\n\ngym-cellular\n\n" >> ' + experiment_path + 'commits.txt')
-    system('cd gym-cellular; git log -n 1 >> ../' + experiment_path + 'commits.txt')
-
-    # load and copy config file
-    config_file_path = 'config_files/' + config_file_name
-    with open(config_file_path, 'r') as config_file:
-        config = load(config_file)
-    config['agent'] = agent_id
-    with open(experiment_path + config_file_name, 'w') as new_config_file:
-        new_config_file.write(dumps(config, indent=4))
-
-    if not quiet:
-        print('\nSTARTED TRAINING \n')
-        print('configurations:')
-        pprint(config)
-
-    # import agent
-    if agent_id == 'peucrl':
-        from agents import PeUcrlAgent as Agent
-    elif agent_id == 'noshielding':
-        from agents import NoShieldingAgent as Agent
-    elif agent_id == 'noshieldingnopruning':
-        from agents import NoShieldingNoPruningAgent as Agent
-    elif agent_id == 'ucrl2':
-        from agents import Ucrl2Agent as Agent
-    else:
-        raise ValueError('Agent not found.')
-        
-
-    if 'polarisation' in config_file_name:
-
-        import gym_cellular
-
-        # instantiate environment
-        env = gym.make(
-            config["environment_version"],
-            n_users=config["n_users"],
-            n_user_states=config["n_user_states"],
-            n_recommendations=config["n_recommendations"],
-            n_moderators=config["n_moderators"],
-            seed=config["environment_seed"],
-        )
-
-        # instantiate agent
-        agt = Agent(
-            confidence_level=config["confidence_level"],
-            n_cells=config["n_users"],
-            n_intracellular_states=config["n_user_states"] * 2,
-            cellular_encoding=env.cellular_encoding,
-            n_intracellular_actions=config["n_recommendations"],
-            cellular_decoding=env.cellular_decoding,
-            reward_function=env.tabular_reward_function,
-            cell_classes=env.get_cell_classes(),
-            cell_labelling_function=env.get_cell_labelling_function(),
-            regulatory_constraints=config["regulatory_constraints"],
-            initial_policy=env.get_initial_policy(),
-            seed=config["agent_seed"],
-        )
-
-    # run agent
-    # initialise environment
     state, info = env.reset()
+    
+    for t in range(max_n_time_steps):
 
-    # print
-    if not quiet:
-        print("state:", state)
-        print("time step:", 0, "\n")
-
-    with open(experiment_path + 'data.csv', 'a') as data_file:
-        data_file.write('time_step,reward,side_effects_incidence,ns_between_time_steps,ns_between_episodes,explorability,transfer_explorability')
-    # with open(experiment_path + 'update_type.csv', 'a') as update_type_file:
-    #     update_type_file.write('time_step')
-    #     for cell in range(0, agt.n_cells):
-    #         update_type_file.write(',new_episode_' + str(cell) + ',new_action_pruning_' + str(cell))
-
-    for time_step in range(config["max_time_steps"]):
+        if state==(0,1):
+            print('the state!')
 
         action = agt.sample_action(state)
-        R = env.tabular_reward_function(cellular2tabular(env.cellular_encoding(state), agt.n_intracellular_states, agt.n_cells), cellular2tabular(action, agt.n_intracellular_actions, agt.n_cells))
         state, reward, terminated, truncated, info = env.step(action)
-        agt.update(state, reward, info["side_effects"])
+        agt.update(state, reward, info['side_effects'])
+        save_data(path,time_step=t+1,env=env.get_data(),agt=agt.get_data())
+        if (t + 1) % 1000 == 0 or t == max_n_time_steps - 1:
+            save_backup(path,env,agt)
 
-        with open(experiment_path + 'data.csv', 'a') as data_file:
-            data_file.write('\n' + str(time_step + 1) + ',' + str(reward) + ',' + str(env.get_side_effects_incidence()) + ',' + str(agt.get_ns_between_time_steps()) + ',' + str(agt.get_ns_between_episodes()))
-            div = (config['n_user_states']*2*config['n_recommendations'])**config['n_users']
-            explorability = sum([1 if agt.vk[s,a]+agt.Nk[s,a]>0 else 0 for s in range(agt.n_states) for a in range(agt.n_actions)])/div
-            try:
-                transfer_explorability = sum([1 if agt.cell_vk[s,a]+agt.cell_Nk[s,a]>0 else 0 for s in range(agt.n_states) for a in range(agt.n_actions)])/div
-            except:
-                transfer_explorability = explorability
-            data_file.write(',{:e}'.format(explorability) + ',{:e}'.format(transfer_explorability))
-        # with open(experiment_path + 'update_type.csv', 'a') as update_type_file:
-        #     update_type_file.write('\n' + str(time_step + 1))
-        #     update_type = agt.get_update_type()
-        #     for cell in range(agt.n_cells):
-        #         if cell in update_type['new_episode']:
-        #             update_type_file.write(',1')
-        #         else:
-        #             update_type_file.write(',' + str(nan))
-        #         if cell in update_type['new_action_pruning']:
-        #             update_type_file.write(',1')
-        #         else:
-        #             update_type_file.write(',' + str(nan))
-                
 
-        if terminated or truncated:
-            break
+def initialize_save(path):
+    try:
+        os.mkdir(path)
+    except FileExistsError:
+        raise RuntimeError("Data directory '" + path + "' already exists. As a safety mechanism you are required to move it or delete it before running this script again.")
+    with open(path + 'data.csv', 'a') as data_file:
+        data_file.write('time step,')
+        data_file.write('reward,')
+        data_file.write('side effects incidence,')
+        data_file.write('off policy time,')
+        data_file.write('updated cells,')
+        data_file.write('update kinds\n')
 
-        # print
-        if not quiet:
-            if render:
-                env.render()
-            else:
-                if time_step <= 0:
-                    print("action:", action, "\nstate:", state, "\nreward:", reward, "\nside effects:")
-                    pprint(info["side_effects"])
-                    print("time step:", time_step + 1, '\n\n', end='\r')
-                elif time_step >= config["max_time_steps"] - 1:
-                    print("\n\naction:", action, "\nstate:", state, "\nreward:", reward, "\nside effects:")
-                    pprint(info["side_effects"])
-                    print("time step:", time_step + 1)
-                else:
-                    stdout.write('\033[3K')
-                    print("time step:", time_step + 1, end='\r')
-        
-        assert  R == reward
 
-        # save agent
-        if time_step % 10000 == 0:
-            with open(experiment_path + '.tmp_agt.pkl', 'wb') as agt_file:
-                pickle.dump(agt, agt_file)
-            system('cp -f ' + experiment_path + '.tmp_agt.pkl' + ' ' + experiment_path + 'agt.pkl')
-            system('rm -f ' + experiment_path + '.tmp_agt.pkl')
+def save_data(
+    path: str,
+    time_step: int,
+    env: dict,
+    agt: dict,
+):
+            
+    with open(path + 'data.csv', 'a') as data_file:
+        data_file.write('{:g},'.format(time_step))
+        data_file.write(str(env['reward']) + ',')
+        data_file.write(str(env['side_effects_incidence']) + ',')
+        data_file.write(str(agt['off_policy_time']) + ',')
+        data_file.write(str(agt['updated_cells']) + ',')
+        data_file.write(str(agt['update_kinds']) + '\n')
 
-    print('\nTRAINING ENDED\n')
+def save_backup(path,env,agt):
+    with open(path + 'tmp_backup.pkl', 'wb') as backup_file:
+        pkl.dump(
+            {
+                'env': env,
+                'agt': agt,
+            },
+            backup_file,
+        )
+    os.system('cp -f ' + path + 'tmp_backup.pkl ' + path + 'backup.pkl')
+    os.system('rm ' + path + 'tmp_backup.pkl')
+
