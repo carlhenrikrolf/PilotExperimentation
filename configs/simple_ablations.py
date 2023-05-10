@@ -2,7 +2,7 @@ from .envs import debug_env
 from agents import PeUcrlAgt, NoPruningAgt, NoShieldAgt
 
 config = {
-    'env': debug_env,
+    'env': [debug_env] * 9,
     'agt': [
         PeUcrlAgt,
         PeUcrlAgt,
@@ -25,8 +25,8 @@ config = {
         1,
         2,
     ],
-    'regulatory_constraints': 'true',
-    'max_n_time_steps': 100,
+    'regulatory_constraints': ['true'] * 9,
+    'max_n_time_steps': [100] * 9,
     'dir': [
         'peucrl0/',
         'peucrl1/',
@@ -39,5 +39,5 @@ config = {
         'noshield2/',
     ],
     'super_dir': 'simple_ablations/',
-    'n_cores': 10,
+    'max_workers': 9,
 }

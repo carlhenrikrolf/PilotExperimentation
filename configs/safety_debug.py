@@ -7,6 +7,6 @@ config = {
     'seed': 0,
     'regulatory_constraints': 'P>=1 [ G n<=1 ]',
     'max_n_time_steps': 1000,
-    'path': 'results/debug/',
+    'dir': 'debug/',
 }
 

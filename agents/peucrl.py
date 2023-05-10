@@ -6,8 +6,9 @@ from gym_cellular.envs.utils import generalized_cellular2tabular as cellular2tab
 import copy as cp
 import numpy as np
 import os
+from psutil import Process
 import subprocess
-from time import perf_counter
+import time
 
 class PeUcrlAgt:
 
@@ -375,14 +376,14 @@ class PeUcrlAgt:
         self.data['off_policy_time'] = np.nan
         self.data['updated_cells'] = ''
         if self.new_episode or self.new_pruning:
-            self.data['off_policy_time'] = perf_counter()
+            self.data['off_policy_time'] = time.perf_counter()
             self.off_policy()
             self.last_cellular_action = cp.copy(self.policy[:, self.last_tabular_state])
             self.last_tabular_action = cellular2tabular(
                 self.last_cellular_action,
                 self.prior_knowledge.action_space,
             )
-        self.data['off_policy_time'] = perf_counter() - self.data['off_policy_time']
+        self.data['off_policy_time'] = time.perf_counter() - self.data['off_policy_time']
         output = self.prior_knowledge.decellularize(
             cellular_element=self.last_cellular_action,
             space=self.prior_knowledge.action_space,
@@ -500,12 +501,13 @@ class PeUcrlAgt:
     ):
         
         # initialise prism
-        tmp_id = np.random.randint(0, 1000000)
-        self.prism_path = 'agents/prism_files/tmp_' + str(tmp_id) + '/'
+        cpu_id = Process().cpu_num()
+        tmp_id = np.random.randint(0, time.perf_counter_ns())
+        self.prism_path = '.prism_tmps/' + str(cpu_id) + str(tmp_id) + '/'
         try:
             os.mkdir(self.prism_path)
         except FileExistsError:
-            print("Error: Cannot create folder. Clean 'agents/prism_files/' folder.")
+            raise RuntimeError("Cannot create folder. Clean '.prism_tmps/' folder.")
         with open(self.prism_path + 'constraints.props', 'a') as props_file:
             props_file.write(self.regulatory_constraints)
 
