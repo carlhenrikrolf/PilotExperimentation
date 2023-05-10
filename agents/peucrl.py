@@ -12,6 +12,9 @@ import time
 
 class PeUcrlAgt:
 
+    def name(self):
+        return 'PE-UCRL'
+
     def __init__(
         self,
         seed,
@@ -23,7 +26,11 @@ class PeUcrlAgt:
         """
 
         # Storing the parameters
-        np.random.seed(seed=seed)
+        if seed is None:
+            self.seed = int(str(time.time_ns())[-9:])
+        else:
+            self.seed = seed
+        np.random.seed(self.seed)
         self.prior_knowledge = prior_knowledge
         self.regulatory_constraints = regulatory_constraints
 
@@ -151,7 +158,16 @@ class PeUcrlAgt:
         )
         self.path = [set() for _ in range(self.prior_knowledge.n_cells)]
 
+        # data collection
         self.data = {}
+        self.data['off_policy_time'] = np.nan
+        self.new_episode = False
+        self.new_pruning = False
+        self.data['updated_cells'] = ''
+
+
+    def reset_seed(self):
+        np.random.seed(self.seed)
 
 
     # Auxiliary function to update N the current state-action count.
@@ -502,12 +518,15 @@ class PeUcrlAgt:
         
         # initialise prism
         cpu_id = Process().cpu_num()
-        tmp_id = np.random.randint(0, time.perf_counter_ns())
-        self.prism_path = '.prism_tmps/' + str(cpu_id) + str(tmp_id) + '/'
-        try:
-            os.mkdir(self.prism_path)
-        except FileExistsError:
-            raise RuntimeError("Cannot create folder. Clean '.prism_tmps/' folder.")
+        tmp_id = np.random.randint(0, time.time_ns())
+        self.prism_path = '.prism_tmps/' + str(cpu_id) + str(tmp_id)[-5:] + '/'
+        while True:
+            try:
+                os.mkdir(self.prism_path)
+                break
+            except FileExistsError:
+                #raise RuntimeError("Cannot create folder. Clean '.prism_tmps/' folder.")
+                time.sleep(0.1)
         with open(self.prism_path + 'constraints.props', 'a') as props_file:
             props_file.write(self.regulatory_constraints)
 
@@ -612,6 +631,7 @@ class PeUcrlAgt:
 
     # To get the data to save.
     def get_data(self):
+        self.data['name'] = self.name()
         if np.isnan(self.data['off_policy_time']):
             self.data['off_policy_time'] = ''
         if self.new_episode and self.new_pruning:

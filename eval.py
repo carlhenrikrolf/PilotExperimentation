@@ -1,115 +1,54 @@
-"""This script produces plots and tables to visualise the data from explore.py"""
-
-# import modules
-import json
+import argparse
 import matplotlib.pyplot as plt
-import numpy as np
-from os import system
 import pandas as pd
-from sys import argv
 
-if len(argv) == 1:
+# Parse arguments
+parser = argparse.ArgumentParser(description='Evaluate results through plotting and calculating metrics')
+parser.add_argument(
+    'path',
+    metavar='<path>',
+    help="Evaluates the data in 'results/<path>/'"
+)
+args = parser.parse_args()
 
-    print('Please provide an argument.')
+# variables
+path = 'results/' + args.path + '/'
 
-elif len(argv) == 2:
-
-    experiment_dir = argv[1]
-
-    # define input directory
-    if experiment_dir[-1] != '/':
-        experiment_dir = experiment_dir + '/'
-    experiment_path = 'results/' + experiment_dir
-
-    # # explorability
-    # # with open(experiment_path + '*.json', 'r') as config_file:
-    # #     config = json.load(config_file)
-    # explorability = pd.read_csv(
-    #     experiment_path + 'data.csv',
-    #     index_col='time_step',
-    #     usecols=['time_step', 'explorability'],
-    # )
-    # plt.plot(explorability)
-    # #plt.axhline(y=config['n_recommendations']*config['n_user_states']**config['n_cells'])
-    # plt.savefig(experiment_path + 'explorability_vs_time.png')
-    # plt.close()
-
-    # read data
-    rewards = pd.read_csv(
-        experiment_path + 'data.csv',
-        index_col='time_step',
-        usecols=['time_step', 'reward'],
+# plot rewards
+rewards = pd.read_csv(
+        path + 'data.csv',
+        index_col='time step',
+        usecols=['time step', 'reward'],
     )
+rolling_window = int(len(rewards)/20)
+plt.plot(rewards.rolling(rolling_window).mean())
+plt.xlabel('time step')
+plt.ylabel('reward\n(rolling mean over ' + str(rolling_window) + ' time steps)')
+plt.savefig(path + 'reward_vs_time.png')
+plt.close()
 
-    side_effects_incidence = pd.read_csv(
-        experiment_path + 'data.csv',
-        index_col='time_step',
-        usecols=['time_step', 'side_effects_incidence'],
-    )
+# plot side effects
+side_effects_incidence = pd.read_csv(
+    path + 'data.csv',
+    index_col='time step',
+    usecols=['time step', 'side effects incidence'],
+)
+rolling_window = int(len(side_effects_incidence)/20)
+fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+ax1.plot(side_effects_incidence[:50])
+ax1.set_xlabel('time step')
+ax1.set_ylabel('side effects incidence')
+ax1.set_ylim(-0.03, 1.03)
+ax2.plot(side_effects_incidence[50:].rolling(rolling_window).max())
+ax2.set_xlabel('time step\n(rolling max over ' + str(rolling_window) + ' time steps)')
+ax2.set_ylim(-0.03, 1.03)
+fig.savefig(path + 'side_effects_incidence_vs_time.png')
 
-    ns_between = pd.read_csv(
-        experiment_path + 'data.csv',
-        index_col='time_step',
-        usecols=['time_step', 'ns_between_time_steps', 'ns_between_episodes'],
-    )
-
-    # plot data
-
-    plt.plot(side_effects_incidence[:50])
-    plt.xlabel('time step')
-    plt.ylabel('side effects incidence')
-    plt.ylim(-0.03, 1.03)
-    plt.savefig(experiment_path + 'side_effects_incidence_first_50.png')
-    plt.close()
-
-    plt.plot(rewards.index.values, rewards.values.cumsum() / rewards.index.values)
-    plt.xlabel('time step')
-    plt.ylabel('cumulative average reward')
-    plt.savefig(experiment_path + 'cumulative_average_reward_vs_time.png')
-    plt.close()
-
-    plt.plot(side_effects_incidence.cummax())
-    plt.xlabel('time step')
-    plt.ylabel('cumulative max side effects incidence')
-    plt.ylim(-0.03, 1.03)
-    plt.savefig(experiment_path + 'cumulative_max_side_effects_incidence_vs_time.png')
-    plt.close()
-
-    rolling_window = int(len(rewards)/20)
-    plt.plot(rewards.rolling(rolling_window).mean())
-    plt.xlabel('time step')
-    plt.ylabel('reward\n(rolling mean over ' + str(rolling_window) + ' time steps)')
-    plt.savefig(experiment_path + 'reward_vs_time.png')
-    plt.close()
-
-    rolling_window = int(len(side_effects_incidence)/20)
-    plt.plot(side_effects_incidence.rolling(rolling_window).max())
-    plt.xlabel('time step')
-    plt.ylabel('side effects incidence\n(rolling max over ' + str(rolling_window) + ' time steps)')
-    plt.ylim(-0.03, 1.03)
-    plt.savefig(experiment_path + 'side_effects_incidence_vs_time.png')
-    plt.close()
-
-    plt.eventplot(ns_between.index[ns_between['ns_between_episodes'].notnull()])
-    plt.xlabel('time step')
-    plt.xlim(0, len(ns_between))
-    plt.ylabel('updates')
-    plt.yticks([],[])
-    plt.savefig(experiment_path + 'updates.png')
-    plt.close()
-
-    # make tables
-    s_between = ns_between / 1e9
-    s_between.rename(
-        columns={
-            'ns_between_time_steps': 's_between_time_steps',
-            'ns_between_episodes': 's_between_episodes',
-        },
-        inplace=True,
-    )
-    time_complexities = s_between.describe()
-    time_complexities.to_csv(experiment_path + 'time_complexities.csv')
-
-else:
-    
-    print('Too many arguments.')
+# Calculate time complexity metrics
+off_policy_time = pd.read_csv(
+    path + 'data.csv',
+    index_col='time step',
+    usecols=['time step', 'off policy time'],
+)
+time_complexities = off_policy_time.describe()
+time_complexities.to_csv(path + 'time_complexities.csv')

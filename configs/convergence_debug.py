@@ -6,7 +6,7 @@ config = {
     'agt': PeUcrlAgt,
     'seed': 0,
     'regulatory_constraints': 'true',
-    'max_n_time_steps': 1000,
+    'max_n_time_steps': 100,
     'dir': 'debug/',
 }
 

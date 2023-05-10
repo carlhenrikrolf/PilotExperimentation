@@ -38,11 +38,10 @@ def train(
 ):
 
     state, info = env.reset()
+    agt.reset_seed()
+    save_data(path,time_step=0,env=env.get_data(),agt=agt.get_data())
 
     for t in range(max_n_time_steps):
-
-        if state==(0,1):
-            print('the state!')
 
         action = agt.sample_action(state)
         state, reward, terminated, truncated, info = env.step(action)
