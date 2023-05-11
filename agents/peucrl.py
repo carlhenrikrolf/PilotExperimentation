@@ -643,5 +643,6 @@ class PeUcrlAgt:
         else:
             self.data['update_kinds'] = ''
         self.data['updated_cells'] = self.data['updated_cells'][:-1]
+        self.data['regulatory_constraints'] = self.regulatory_constraints
         return self.data
 

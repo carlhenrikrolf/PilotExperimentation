@@ -1,8 +1,8 @@
-from .envs import debug_env
+from .envs import cells3easy_env as env
 from agents import PeUcrlAgt
 
 config = {
-    'env': debug_env,
+    'env': env,
     'agt': PeUcrlAgt,
     'seed': 0,
     'regulatory_constraints': 'true',

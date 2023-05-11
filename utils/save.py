@@ -46,7 +46,8 @@ def initialize_data(path):
         data_file.write('off policy time,')
         data_file.write('updated cells,')
         data_file.write('update kinds,')
-        data_file.write('agent\n')
+        data_file.write('agent,')
+        data_file.write('regulatory constraints\n')
 
 def save_data(
     path: str,
@@ -62,7 +63,8 @@ def save_data(
         data_file.write(str(agt['off_policy_time']) + ',')
         data_file.write(str(agt['updated_cells']) + ',')
         data_file.write(str(agt['update_kinds']) + ',')
-        data_file.write(str(agt['name']) + '\n')
+        data_file.write(str(agt['name']) + ',')
+        data_file.write(str(agt['regulatory_constraints']) + '\n')
 
 def save_backup(path,env,agt):
     with open(path + 'tmp_backup.pkl', 'wb') as backup_file:
