@@ -299,7 +299,8 @@ class PeUcrlAgt:
                     if hasattr(self.prior_knowledge, 'reward_func'):
                         optimistic_reward = self.reward_func[s, a]
                     else:
-                        optimistic_reward = min((1, r_estimate[s, a] + self.r_distances[s, a]))
+                        optimistic_reward = min([1, r_estimate[s, a] + self.r_distances[s, a]])
+                    optimistic_reward = min([1, optimistic_reward + self.reward_shaping(s, a)]) # I think this should work fine theoretically for nown reward functions, but it is a bit less clear what I should do with unknown reward functions, I might get a factor of 2 somewhere in the proof.
                     temp[a] = optimistic_reward + sum(
                         [u * p for (u, p) in zip(u0, max_p)])
                     temp[a] *= self.transition_indicator[s, a]
@@ -431,7 +432,6 @@ class PeUcrlAgt:
 
     # Registering new side effects
     def side_effects_processing(self, side_effects):
-
         for reporting_cell in range(self.prior_knowledge.n_cells):
             for reported_cell in range(self.prior_knowledge.n_cells):
                 reported_current_intracellular_state = self.current_cellular_state[reported_cell]
@@ -439,6 +439,18 @@ class PeUcrlAgt:
                     self.side_effects_funcs[reported_current_intracellular_state] -= {'unsafe'}
                 elif side_effects[reporting_cell, reported_cell] == 'unsafe':
                     self.side_effects_funcs[reported_current_intracellular_state] -= {'safe'}
+
+
+    def reward_shaping(self, tabular_state, tabular_action):
+        cellular_state = tabular2cellular(
+            tabular_state,
+            self.prior_knowledge.state_space,
+        )
+        for si in cellular_state:
+            if self.side_effects_funcs[si] == {'safe', 'unsafe'}:
+                return self.r_distances[tabular_state, tabular_action]
+        return 0.0
+
 
     # Action pruning
     def action_pruning(self):
