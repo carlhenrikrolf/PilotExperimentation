@@ -1,6 +1,6 @@
 debug_env = {
     'args': [
-        'gym_cellular/Debug-v0', # id
+        'gym_cellular/DeepExplorationDebug-v0', # id
         None, # max_episode_steps
         False, # autoreset
         None, # apply_api_compatibility

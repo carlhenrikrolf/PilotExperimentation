@@ -38,33 +38,56 @@ def save_metadata(path, config):
     with open(path, 'a') as file:
         file.write('\n\nconfig = ' + str(config))
 
-def initialize_data(path):
+def initialize_data(path, **kwargs):
     with open(path + 'data.csv', 'a') as data_file:
-        data_file.write('time step,')
-        data_file.write('reward,')
-        data_file.write('side effects incidence,')
-        data_file.write('off policy time,')
-        data_file.write('updated cells,')
-        data_file.write('update kinds,')
-        data_file.write('agent,')
-        data_file.write('regulatory constraints\n')
+        data_file.write('time step')
+        data_file.write(',')
+        data_file.write('reward')
+        data_file.write(',')
+        data_file.write('side effects incidence')
+        data_file.write(',')
+        data_file.write('off policy time')
+        data_file.write(',')
+        data_file.write('updated cells')
+        data_file.write(',')
+        data_file.write('update kinds')
+        data_file.write(',')
+        data_file.write('agent')
+        data_file.write(',')
+        data_file.write('regulatory constraints')
+        for key in kwargs:
+            data_file.write(',')
+            data_file.write(key)
+        data_file.write('\n')
 
 def save_data(
     path: str,
-    time_step: int,
     env: dict,
-    agt: dict = None,
+    agt: dict,
+    **kwargs,
 ):
 
     with open(path + 'data.csv', 'a') as data_file:
-        data_file.write(str(time_step) + ',')
-        data_file.write(str(env['reward']) + ',')
-        data_file.write(str(env['side_effects_incidence']) + ',')
-        data_file.write(str(agt['off_policy_time']) + ',')
-        data_file.write(str(agt['updated_cells']) + ',')
-        data_file.write(str(agt['update_kinds']) + ',')
-        data_file.write(str(agt['name']) + ',')
-        data_file.write(str(agt['regulatory_constraints']) + '\n')
+        data_file.write(str(env['time_step']))
+        data_file.write(',')
+        data_file.write(str(env['reward']))
+        data_file.write(',')
+        data_file.write(str(env['side_effects_incidence']))
+        data_file.write(',')
+        data_file.write(str(agt['off_policy_time']))
+        data_file.write(',')
+        data_file.write(str(agt['updated_cells']))
+        data_file.write(',')
+        data_file.write(str(agt['update_kinds']))
+        data_file.write(',')
+        data_file.write(str(agt['name']))
+        data_file.write(',')
+        data_file.write(str(agt['regulatory_constraints']))
+        for key in kwargs:
+            data_file.write(',')
+            data_file.write(str(kwargs[key]))
+        data_file.write('\n')
+        
 
 def save_backup(path,env,agt):
     with open(path + 'tmp_backup.pkl', 'wb') as backup_file:

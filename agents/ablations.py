@@ -18,7 +18,7 @@ class NoPruningAgt(PeUcrlAgt):
     def action_pruning(self):
         self.new_pruning = False
 
-class NoPruningNoShieldAgt(PeUcrlAgt):
+class UnsafeBaselineAgt(PeUcrlAgt):
 
     def name(self):
         return 'unsafe baseline'
@@ -28,3 +28,6 @@ class NoPruningNoShieldAgt(PeUcrlAgt):
 
     def action_pruning(self):
         self.new_pruning = False
+
+    def reward_shaping(self, tabular_state, tabular_action):
+        return 0.0

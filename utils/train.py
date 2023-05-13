@@ -28,25 +28,32 @@ def instantiate(config, index=None):
             regulatory_constraints=config['regulatory_constraints'][index],
         )
     return env, agt
-
+    
 
 def train(
     path: str,
     env,
     agt,
-    max_n_time_steps: int 
+    max_n_time_steps: int,
+    restart=False,
+    **kwargs,
 ):
 
-    state, info = env.reset()
-    agt.reset_seed()
-    save_data(path,time_step=0,env=env.get_data(),agt=agt.get_data())
+    if restart is True:
+        state = env.get_state()
+        info = env.get_info()
+    else:
+        state, info = env.reset()
+        agt.reset_seed()
+        save_data(path,env=env.get_data(),agt=agt.get_data(),**kwargs)
+        
 
     for t in range(max_n_time_steps):
 
         action = agt.sample_action(state)
         state, reward, terminated, truncated, info = env.step(action)
         agt.update(state, reward, info['side_effects'])
-        save_data(path,time_step=t+1,env=env.get_data(),agt=agt.get_data())
+        save_data(path,env=env.get_data(),agt=agt.get_data(),**kwargs)
         if (t + 1) % 1000 == 0 or t == max_n_time_steps - 1:
             save_backup(path,env,agt)
 
