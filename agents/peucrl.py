@@ -526,9 +526,23 @@ class PeUcrlAgt:
         self,
         tmp_policy,
         p_estimate,
+        n_attempts=10,
     ):
         
-        # initialise prism
+        for attempt in range(n_attempts):
+            try:
+                self.initialize_prism_files()
+                self.write_model_file(tmp_policy, p_estimate)
+                verified = self.run_prism()
+                break
+            except PrismError:
+                if attempt == n_attempts - 1:
+                    raise PrismError
+                os.system('rm -r -f ' + self.prism_path) # clean
+        os.system('rm -r -f ' + self.prism_path) # clean
+        return verified
+    
+    def initialize_prism_files(self):
         cpu_id = Process().cpu_num()
         tmp_id = np.random.randint(0, time.time_ns())
         self.prism_path = '.prism_tmps/' + str(cpu_id) + str(tmp_id)[-5:] + '/'
@@ -537,38 +551,9 @@ class PeUcrlAgt:
                 os.mkdir(self.prism_path)
                 break
             except FileExistsError:
-                #raise RuntimeError("Cannot create folder. Clean '.prism_tmps/' folder.")
                 time.sleep(0.1)
-        with open(self.prism_path + 'constraints.props', 'a') as props_file:
+        with open(self.prism_path + 'constraints.props', 'w') as props_file:
             props_file.write(self.regulatory_constraints)
-
-        # write model file
-        self.write_model_file(tmp_policy, p_estimate)
-
-        # verify
-        try:
-            output = subprocess.check_output(['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props'])
-        except subprocess.CalledProcessError as error:
-            raise RuntimeError('Prism returned the following error:\n' + error.output.decode())
-        output = output.decode()
-        occurances = 0
-        for line in output.splitlines():
-            if 'Result:' in line:
-                occurances += 1
-                if 'true' in line:
-                    verified = True
-                elif 'false' in line:
-                    verified = False
-                else:
-                    raise ValueError('Verification returned non-Boolean result.')
-        if occurances != 1:
-            raise ValueError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
-        self.prism_output = output # for debugging purposes
-
-        # clean
-        os.system('rm -r -f ' + self.prism_path)
-
-        return verified
     
     def write_model_file(
             self,
@@ -641,6 +626,28 @@ class PeUcrlAgt:
                     prism_file.write("c_" + str(cell) + " + ")
                 prism_file.write("0;\n")
 
+    def run_prism(self):
+        try:
+            output = subprocess.check_output(['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props'])
+        except subprocess.CalledProcessError as error:
+            raise PrismError('Prism returned the following error:\n' + error.output.decode())
+        output = output.decode()
+        occurances = 0
+        for line in output.splitlines():
+            if 'Result:' in line:
+                occurances += 1
+                if 'true' in line:
+                    verified = True
+                elif 'false' in line:
+                    verified = False
+                else:
+                    raise PrismError('Verification returned non-Boolean result.')
+        if occurances != 1:
+            raise PrismError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
+        self.prism_output = output # for debugging purposes
+        return verified
+
+
     # To get the data to save.
     def get_data(self):
         self.data['name'] = self.name()
@@ -657,4 +664,8 @@ class PeUcrlAgt:
         self.data['updated_cells'] = self.data['updated_cells'][:-1]
         self.data['regulatory_constraints'] = self.regulatory_constraints
         return self.data
+    
+    
+class PrismError(Exception):
+    pass
 
