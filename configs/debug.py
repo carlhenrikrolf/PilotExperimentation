@@ -7,7 +7,7 @@ config = {
     'seed': None,
     'regulatory_constraints': 'P>=1 [ G n<=1 ]',
     'max_n_time_steps': int(1e7),
-    'dir': 'debug/',
+    'dir': 'alt_debug/',
     'kwargs': {},
 }
 

@@ -1,6 +1,6 @@
 debug_env = {
     'args': [
-        'gym_cellular/Cells3States3Actions3-v0', # id
+        'gym_cellular/Cells2Rest3-v0', # id
         None, # max_episode_steps
         False, # autoreset
         None, # apply_api_compatibility
