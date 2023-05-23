@@ -12,6 +12,10 @@ def boosted_distances(agt):
                 maxN = max([1, agt.transferNk[s, a]])
             agt.p_distances[s, a] = 1.0 / maxN + np.sqrt(1.0/maxN)
 
+            # dampened exploration:
+            agt.r_distances[s, a] *= 1.0 / maxN
+            agt.r_distances[s, a] = np.sqrt(agt.r_distances[s, a])
+
 class BoostStartPeUcrlAgt(PeUcrlAgt):
 
     def name(self):

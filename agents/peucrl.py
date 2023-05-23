@@ -526,18 +526,21 @@ class PeUcrlAgt:
         self,
         tmp_policy,
         p_estimate,
-        n_attempts=10,
+        n_attempts=3,
     ):
         
+        self.data['prism_error'] = ''
         for attempt in range(n_attempts):
             try:
                 self.initialize_prism_files()
                 self.write_model_file(tmp_policy, p_estimate)
                 verified = self.run_prism()
                 break
-            except PrismError:
+            except PrismError as error:
                 if attempt == n_attempts - 1:
-                    raise PrismError
+                    #raise PrismError
+                    verified = False
+                    self.data['prism_error'] = str(error)
                 os.system('rm -r -f ' + self.prism_path) # clean
         os.system('rm -r -f ' + self.prism_path) # clean
         return verified
@@ -630,7 +633,9 @@ class PeUcrlAgt:
         try:
             output = subprocess.check_output(['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props'])
         except subprocess.CalledProcessError as error:
-            raise PrismError('Prism returned the following error:\n' + error.output.decode())
+            with open('.prism_tmps/error.txt', 'a') as error_file:
+                error_file.write(error.output.decode())
+            raise PrismError('Prism returned an error. See ".prism_tmps/error.txt" for details.')
         output = output.decode()
         occurances = 0
         for line in output.splitlines():
@@ -661,6 +666,7 @@ class PeUcrlAgt:
             self.data['update_kinds'] = 'pruning'
         else:
             self.data['update_kinds'] = ''
+            self.data['prism_error'] = ''
         self.data['updated_cells'] = self.data['updated_cells'][:-1]
         self.data['regulatory_constraints'] = self.regulatory_constraints
         return self.data

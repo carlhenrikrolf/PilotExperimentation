@@ -7,6 +7,6 @@ debug_env = {
         None, # disable_env_checker
     ],
     'kwargs': {
-        'difficulty': 'impossible',
+        'difficulty': 'easy',
     }
 }

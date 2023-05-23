@@ -46,17 +46,22 @@ raw_rewards = pd.read_csv(
 )
 print('reward data loaded')
 
-rewards = binning(raw_rewards, 'reward', n_bins, kind='max')
+rewards = binning(raw_rewards, 'reward', n_bins, kind='mean')
 plt.plot(rewards['time step'].values, rewards['reward'].values)
+rewards = binning(raw_rewards, 'reward', n_bins, kind='max')
+plt.plot(rewards['time step'].values, rewards['reward'].values, '--')
 plt.xlabel('time step (' + str(n_bins) + ' bins)')
 plt.ylabel('reward')
+plt.legend(['mean', 'max'])
 plt.savefig(path + 'reward_vs_time.png')
 plt.close()
 
-plt.plot(rewards['time step'].values, rewards['reward'].values.cumsum())
-plt.xlabel('time step (' + str(n_bins) + ' bins)')
-plt.ylabel('cumulative reward')
-plt.savefig(path + 'cumulative_reward.png')
+raw_acr = raw_rewards
+raw_acr['reward'] = raw_acr['reward'].cumsum()/raw_acr.index.values
+plt.plot(raw_acr)
+plt.xlabel('time step')
+plt.ylabel('average cumulative reward')
+plt.savefig(path + 'acr.png')
 plt.close()
 print('reward plots saved')
 
