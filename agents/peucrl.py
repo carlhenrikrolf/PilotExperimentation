@@ -601,12 +601,18 @@ class PeUcrlAgt:
                 init_iter = True
                 for next_s in range(self.prior_knowledge.n_states):
                     lb = max(
-                        [epsilon,
-                         p_estimate[s, a, next_s] - self.p_distances[s, a]]
+                        epsilon,
+                        max(
+                            0,
+                            p_estimate[s, a, next_s] - self.p_distances[s, a]
+                        ),
                     )
                     ub = min(
-                        [1-epsilon,
-                         p_estimate[s, a, next_s] + self.p_distances[s, a]]
+                        1-epsilon,
+                        min(
+                            1,
+                            p_estimate[s, a, next_s] + self.p_distances[s, a]
+                        ),
                     )
                     if not init_iter:
                         prism_file.write(' + ')
@@ -631,8 +637,11 @@ class PeUcrlAgt:
 
     def run_prism(self):
         try:
-            output = subprocess.check_output(['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props'])
+            command = ['prism/prism/bin/prism', self.prism_path + 'model.prism', self.prism_path + 'constraints.props']
+            output = subprocess.check_output(command, timeout=None)
+            self.prism_output = output # for debugging purposes
         except subprocess.CalledProcessError as error:
+            self.prism_output = error.output.decode() # for debugging purposes
             with open('.prism_tmps/error.txt', 'a') as error_file:
                 error_file.write(error.output.decode())
             raise PrismError('Prism returned an error. See ".prism_tmps/error.txt" for details.')
@@ -649,7 +658,6 @@ class PeUcrlAgt:
                     raise PrismError('Verification returned non-Boolean result.')
         if occurances != 1:
             raise PrismError('Verification returned ' + str(occurances) + ' results. Expected 1 Boolean result.')
-        self.prism_output = output # for debugging purposes
         return verified
 
 
