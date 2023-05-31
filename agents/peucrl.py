@@ -83,14 +83,6 @@ class PeUcrlAgt:
             dtype=float,
         )
         if self.prior_knowledge.identical_intracellular_transitions is True:
-            self.intracellularPk = np.zeros(
-                shape=(self.prior_knowledge.n_intracellular_states, self.prior_knowledge.n_intracellular_actions, self.prior_knowledge.n_intracellular_states),
-                dtype=int,
-            )
-            self.transferPk = np.zeros(
-                shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions, self.prior_knowledge.n_states),
-                dtype=int,
-            )
             self.intracellularvk = np.zeros(
                 shape=(self.prior_knowledge.n_intracellular_states, self.prior_knowledge.n_intracellular_actions),
                 dtype=int,
@@ -99,10 +91,29 @@ class PeUcrlAgt:
                 shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
                 dtype=int,
             )
+            self.intracellularNk = np.zeros(
+                shape=(self.prior_knowledge.n_intracellular_states, self.prior_knowledge.n_intracellular_actions),
+                dtype=int,
+            )
+            assert self.intracellularNk.shape == self.intracellularvk.shape
             self.transferNk = np.zeros(
                 shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
                 dtype=int,
             )
+            assert self.transferNk.shape == self.transfervk.shape
+            self.intracellularPk = np.zeros(
+                shape=(self.prior_knowledge.n_intracellular_states, self.prior_knowledge.n_intracellular_actions, self.prior_knowledge.n_intracellular_states),
+                dtype=int,
+            )
+            assert self.intracellularPk[:,:,0].shape == self.intracellularvk.shape
+        self.r_estimate = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
+            dtype=float,
+        )
+        self.p_estimate = np.zeros(
+            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions, self.prior_knowledge.n_states),
+            dtype=float,
+        )
 
 
         # Misc initializations
@@ -188,53 +199,41 @@ class PeUcrlAgt:
     def updateP(self):
         self.Pk[self.last_tabular_state, self.last_tabular_action, self.current_tabular_state] += 1
 
-    def update_intracellularP(self): # not quite right
-        for si, ai, next_si in zip(
-            self.last_cellular_state,
-            self.last_cellular_action,
-            self.current_cellular_state,
-        ):
-            self.intracellularPk[si, ai, next_si] += 1
-
-    def update_transferP(self):
-        for s in range(self.prior_knowledge.n_states):
-            for a in range(self.prior_knowledge.n_actions):
-                for next_s in range(self.prior_knowledge.n_states):
-                    distinct_triplet_set = set(
-                        zip(
-                            tabular2cellular(s, self.prior_knowledge.state_space),
-                            tabular2cellular(a, self.prior_knowledge.action_space),
-                            tabular2cellular(next_s, self.prior_knowledge.state_space),
-                        )
-                    )
-                    self.transferPk[s, a, next_s] = min(
-                        [self.intracellularPk[si, ai, next_si] for si, ai, next_si in distinct_triplet_set]
-                    )
-    
     def update_intracellularv(self):
-        for si, ai in zip(
-            self.last_cellular_state,
-            self.last_cellular_action,
-        ):
+        for si, ai in zip(self.last_cellular_state, self.last_cellular_action):
             self.intracellularvk[si, ai] += 1
+
+    def update_intracellularP(self):
+        for si, ai, next_si in zip(self.last_cellular_state, self.last_cellular_action, self.current_cellular_state):
+            self.intracellularPk[si, ai, next_si] += 1
 
     def update_transferv(self):
         for s in range(self.prior_knowledge.n_states):
             for a in range(self.prior_knowledge.n_actions):
-                distinct_pair_set = set(
-                    zip(
-                        tabular2cellular(s, self.prior_knowledge.state_space),
-                        tabular2cellular(a, self.prior_knowledge.action_space),
-                    )
+                intracellular_pair_set = zip(
+                    tabular2cellular(s, self.prior_knowledge.state_space),
+                    tabular2cellular(a, self.prior_knowledge.action_space),
                 )
-                self.transfervk[s, a] = min(
-                    [self.intracellularvk[si, ai] for si, ai in distinct_pair_set]
+                self.transfervk[s,a] = min(
+                    [self.intracellularvk[si, ai] for si, ai in intracellular_pair_set]
                 )
+    
+    def update_intracellularN(self):
+        for si in range(self.prior_knowledge.n_intracellular_states):
+            for ai in range(self.prior_knowledge.n_intracellular_actions):
+                self.intracellularNk[si, ai] += self.intracellularvk[si, ai]
 
     def update_transferN(self):
         for s in range(self.prior_knowledge.n_states):
             for a in range(self.prior_knowledge.n_actions):
-                self.transferNk[s, a] += self.transfervk[s, a]
+                intracellular_pair_set = zip(
+                    tabular2cellular(s, self.prior_knowledge.state_space),
+                    tabular2cellular(a, self.prior_knowledge.action_space),
+                )
+                self.transferNk[s,a] = min(
+                    [self.intracellularNk[si, ai] for si, ai in intracellular_pair_set]
+                )
+
 
     # def update_transferv(self):
     #     for s in range(self.prior_knowledge.n_states):
@@ -256,7 +255,31 @@ class PeUcrlAgt:
     #                     if last_pair in distinct_pair_set:
     #                         self.transfervk[s, a] += 1
 
-    # Auxiliary function updating the values of r_distances and p_distances (i.e. the confidence bounds used to build the set of plausible MDPs).
+
+    def estimates(self):
+        for s in range(self.prior_knowledge.n_states):
+            for a in range(self.prior_knowledge.n_actions):
+                maxN = max([1, self.Nk[s, a]])
+                self.r_estimate[s, a] = self.Rk[s, a] / maxN
+                for next_s in range(self.prior_knowledge.n_states):
+                    if self.prior_knowledge.identical_intracellular_transitions is False:
+                        self.p_estimate[s, a, next_s] = self.Pk[s, a, next_s] / maxN
+                    else:
+                        p_estimate = lambda si, ai, next_si: self.intracellularPk[si,ai,next_si] / max(1, self.intracellularNk[si,ai])
+                        self.p_estimate[s, a, next_s] = np.prod(
+                            [
+                                p_estimate(si, ai, next_si) for si, ai, next_si in zip(
+                                    tabular2cellular(s, self.prior_knowledge.state_space),
+                                    tabular2cellular(a, self.prior_knowledge.action_space),
+                                    tabular2cellular(next_s, self.prior_knowledge.state_space),
+                                )
+                            ]
+                        )
+                        # maxN = max([1, self.transferNk[s,a]])
+                        # self.p_estimate[s, a, next_s] = self.transferPk[s, a, next_s] / maxN
+                    assert 0 <= self.r_estimate[s, a] <= 1
+                    assert 0 <= self.p_estimate[s, a, next_s] <= 1
+    # Auxiliary function updating the values of r_distances and p_distances (i.e. the confidence bounds used to build the set of plausible MDPs)
     def distances(self):
         for s in range(self.prior_knowledge.n_states):
             for a in range(self.prior_knowledge.n_actions):
@@ -338,37 +361,26 @@ class PeUcrlAgt:
                 dtype=int,
             )
             if self.prior_knowledge.identical_intracellular_transitions is True:
-                self.update_transferP()
                 if not hasattr(self.prior_knowledge, 'reward_func'):
                     self.update_transferv()
+                    assert (self.transfervk >= self.vk).all()
+                self.update_intracellularN()
                 self.update_transferN()
+                assert (self.transferNk >= self.Nk).all()
                 self.intracellularvk = np.zeros(
                     shape=(self.prior_knowledge.n_intracellular_states, self.prior_knowledge.n_intracellular_actions),
                     dtype=int,
                 )
-        r_estimate = np.zeros(
-            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions),
-            dtype=float,
-        )
-        p_estimate = np.zeros(
-            shape=(self.prior_knowledge.n_states, self.prior_knowledge.n_actions, self.prior_knowledge.n_states),
-            dtype=float,
-        )
-        for s in range(self.prior_knowledge.n_states):
-            for a in range(self.prior_knowledge.n_actions):
-                maxN = max([1, self.Nk[s, a]])
-                r_estimate[s, a] = self.Rk[s, a] / maxN
-                for next_s in range(self.prior_knowledge.n_states):
-                    if self.prior_knowledge.identical_intracellular_transitions is False:
-                        p_estimate[s, a, next_s] = self.Pk[s, a, next_s] / maxN
-                    else:
-                        maxN = max([1, self.transferNk[s,a]])
-                        p_estimate[s, a, next_s] = self.transferPk[s, a, next_s] / maxN
-        self.distances()
+            self.estimates()
+            self.distances()
         behaviour_policy = cp.copy(self.policy)
-        self.EVI(r_estimate, p_estimate, epsilon=1. / max(1, self.t))
+        self.EVI(self.r_estimate, self.p_estimate, epsilon=1. / max(1, self.t))
         target_policy = cp.copy(self.policy)
-        self.pe_shield(behaviour_policy, target_policy, p_estimate)
+        self.pe_shield(behaviour_policy, target_policy, self.p_estimate)
+
+
+
+        
 
 
     def sample_action(self, state):
@@ -426,8 +438,10 @@ class PeUcrlAgt:
         if self.prior_knowledge.identical_intracellular_transitions is True:
             self.update_intracellularP()
             self.update_intracellularv()
+            assert np.array([self.intracellularvk[s,a] + self.intracellularNk[s,a] >= max(self.intracellularPk[s,a,:]) for s in range(self.prior_knowledge.n_intracellular_states) for a in range(self.prior_knowledge.n_intracellular_actions)]).all()
             if hasattr(self.prior_knowledge, 'reward_func'):
                 self.update_transferv()
+                assert (self.transfervk >= self.vk).all()
         self.t += 1
 
     # Registering new side effects
