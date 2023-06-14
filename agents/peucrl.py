@@ -380,7 +380,11 @@ class PeUcrlAgt:
 
 
 
-        
+    def stopping_criterion(self):
+        if self.prior_knowledge.identical_intracellular_transitions is True and hasattr(self.prior_knowledge, 'reward_func'):
+            self.new_episode = self.transfervk[self.last_tabular_state, self.last_tabular_action] >= max([1, self.transferNk[self.last_tabular_state, self.last_tabular_action]])
+        else:
+            self.new_episode = self.vk[self.last_tabular_state, self.last_tabular_action] >= max([1, self.Nk[self.last_tabular_state, self.last_tabular_action]])
 
 
     def sample_action(self, state):
@@ -398,10 +402,7 @@ class PeUcrlAgt:
             self.last_cellular_action,
             self.prior_knowledge.action_space,
         )
-        if self.prior_knowledge.identical_intracellular_transitions is True and hasattr(self.prior_knowledge, 'reward_func'):
-            self.new_episode = self.transfervk[self.last_tabular_state, self.last_tabular_action] >= max([1, self.transferNk[self.last_tabular_state, self.last_tabular_action]])
-        else:
-            self.new_episode = self.vk[self.last_tabular_state, self.last_tabular_action] >= max([1, self.Nk[self.last_tabular_state, self.last_tabular_action]])
+        self.stopping_criterion()
         self.data['off_policy_time'] = np.nan
         self.data['updated_cells'] = ''
         if self.new_episode or self.new_pruning:

@@ -8,5 +8,6 @@ debug_env = {
     ],
     'kwargs': {
         'difficulty': 'hard',
+        'reward_func_is_known': False,
     }
 }

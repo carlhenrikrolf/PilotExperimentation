@@ -15,11 +15,20 @@
   - The input here could be a set containing all the cells that can be ingored in terms of safety (i.e. the non-delicate cells), e.g., ```['children', 'unemployed']```.
 - eGreedy
   - Meant to be modelling when experiments are not coordinated, but reporting of side effects is coordinated.
+    - Better modelled as eOptimistic
   - The input could for example be ```lambda t: 1/max(1,t)```
+    - maybe simplify to a constant here
 - Bounded Divergence
   - Used naively for some policy gradient algorithms, not even specifically for safety.
   - The input could look something like ```{'KL': 0.4, 'SED': 0.2}```
-- Alex Turner stuff
+    - KL might not be that good, see table below of determinstic p,q in D(p||q). It is assumed that 0*(-inf)=0.
+
+q | p=0 | p=1
+---|---|---
+=0 | 0 | inf
+=1 | 0 | 1
+
+- Alex Turner stuff, AUP (attainable utility preservation)
   - I guess some kind of weight for how much to put into the random reward functions should go here
 
 ## Left Out
