@@ -17,8 +17,8 @@ config = {
         None
     ] * 8 * repeats,
     'regulatory_constraints': [
-        *['P>=1 [ G n<=2 ] & P>=1 [ G n_children<=0]'] * 4,
-        *['P>=1 [ G n<=2 ] & P>=1 [ G n_children<=0] & P>=0.80 [ F<=20 n<=1 ]'] * 4,
+        *[{'prism_props': 'P>=1 [ G n<=2 ] & P>=1 [ G n_children<=0]'}] * 4,
+        *[{'prism_props': 'P>=1 [ G n<=2 ] & P>=1 [ G n_children<=0] & P>=0.80 [ F<=20 n<=1 ]'}] * 4,
     ] * repeats,
     'max_n_time_steps': [
         40,

@@ -6,25 +6,25 @@ import numpy as np
 
 class AlwaysSafeAgtPsoAgt(PeUcrlAgt):
 
-    """
-        This agent implements both the AlwaysSafe algorithm (Simao et al.) and the Path-Specific Objectives (PSO) algorithm (Farquhar et al.).
-        It implements both because they reduce to the same algorithm in the cellular MDP setting.
-        The regulatory constraints is a set of cell classes for which the corresponding intracellular policies are safe to update.
-        In AlwaysSafe, this corresponds to the safaety-relevant variables.
-        In PSO, this corresponds to delicate states.
-        The shield works by updating all cells that are not delicate.
-        Otherwise, the algorithm is an adaptation of the UCRL2 algorithm for cellular MDPs.
-        It does not use the prior knowledge that cells have identical transition functions as this is neither assumed in AlwaysSafe nor in PSO.
+    """This agent implements both the AlwaysSafe algorithm (Simao et al.) and the Path-Specific Objectives (PSO) algorithm (Farquhar et al.).
+    It implements both because they reduce to the same algorithm in the cellular MDP setting.
+    The regulatory constraints is a set of cell classes for which the corresponding intracellular policies are safe to update.
+    In AlwaysSafe, this corresponds to the safaety-relevant variables.
+    In PSO, this corresponds to delicate states.
+    The shield works by updating all cells that are not delicate.
+    Otherwise, the algorithm is an adaptation of the UCRL2 algorithm for cellular MDPs.
+    It does not use the prior knowledge that cells have identical transition functions as this is neither assumed in AlwaysSafe nor in PSO.
     """
 
     def name(self):
         return 'AlwaysSafe/PSO'
     
     def __init__(self,seed,prior_knowledge,regulatory_constraints):
-        PeUcrlAgt().__init__(seed,prior_knowledge,regulatory_constraints)
+        PeUcrlAgt().__init__(seed,prior_knowledge,{'prism_props': 'none'})
         self.prior_knowledge.identical_intracellular_transitions = False
         # check input
-        delicate_cell_classes = regulatory_constraints['delicate_cell_classes']
+        self.regulatory_constraints = regulatory_constraints
+        delicate_cell_classes = self.regulatory_constraints['delicate_cell_classes']
         assert type(delicate_cell_classes) is list
         assert set(delicate_cell_classes).issubset(set(self.prior_knowledge.cell_classes))
         # transform into cell indices using prior knowledge
@@ -52,31 +52,31 @@ class AlwaysSafeAgtPsoAgt(PeUcrlAgt):
 
 class NationLikeAgt(PeUcrlAgt):
 
-    """
-        This agent is a simple model of nations (or similar jurisdictions) that do not coordinate their regulations.
-        Rather they tend to be conservative and only update their policies sporadically.
-        When they do so, they do so greedily rather than according to some exploratory policy.
-        Safety comes as a consequence of this decentralisation.
-        If one nation (or other jurisdiction) makes a mistake, the other will learn.
-        The regulatory constraints contain two features:
-        - conservativeness: a float or a list of floats between 0 and 1 that determines the probability of updating a policy greedily
-        - update_frequency: an integer that determines how often a policy is updated
-        It does not use the prior knowledge that cells have identical transition functions.
+    """This agent is a simple model of nations (or similar jurisdictions) that do not coordinate their regulations.
+    Rather they tend to be conservative and only update their policies sporadically.
+    When they do so, they do so greedily rather than according to some exploratory policy.
+    Safety comes as a consequence of this decentralisation.
+    If one nation (or other jurisdiction) makes a mistake, the other will learn.
+    The regulatory constraints contain two features:
+    - conservativeness: a float or a list of floats between 0 and 1 that determines the probability of updating a policy greedily
+    - update_frequency: an integer that determines how often a policy is updated
+    It does not use the prior knowledge that cells have identical transition functions.
     """
 
     def name(self):
         return 'Nation-like'
     
     def __init__(self,seed,prior_knowledge,regulatory_constraints):
-        PeUcrlAgt().__init__(seed,prior_knowledge,regulatory_constraints)
+        PeUcrlAgt().__init__(seed,prior_knowledge,{'prism_props': 'none'})
         self.prior_knowledge.identical_intracellular_transitions = False
-        self.conservativeness = regulatory_constraints['conservativeness']
+        self.regulatory_constraints = regulatory_constraints
+        self.conservativeness = self.regulatory_constraints['conservativeness']
         if type(self.conservativeness) is float:
             self.update_frequency = [self.conservativeness] * self.prior_knowledge.n_cells
         elif type(self.conservativeness) is not list:
             raise ValueError('update_frequency must be a float or a list of floats')
         assert (0 <= self.conservativeness <= 1).all()
-        self.update_frequency = regulatory_constraints['update_frequency']
+        self.update_frequency = self.regulatory_constraints['update_frequency']
         assert 0 <= self.update_frequency
 
     def stopping_criterion(self):
@@ -104,19 +104,18 @@ class NationLikeAgt(PeUcrlAgt):
 
 class AupAgent(PeUcrlAgt):
 
-    """
-        This aget uses the same regularizer as AUP although the RL aglorithm is based on cellular UCRL2.
-    """
+    """This aget uses the same regularizer as AUP although the RL aglorithm is based on cellular UCRL2."""
 
     def name(self):
         return 'AUP'
 
     def __init__(self,seed,prior_knowledge,regulatory_constraints):
-        PeUcrlAgt().__init__(seed,prior_knowledge,regulatory_constraints)
+        PeUcrlAgt().__init__(seed,prior_knowledge,{'prism_props': 'none'})
         self.prior_knowledge.identical_intracellular_transitions = False
-        self.regularization_param = regulatory_constraints['regularization_param']
+        self.regulatory_constraints = regulatory_constraints
+        self.regularization_param = self.regulatory_constraints['regularization_param']
         assert 0 <= self.regularization_param
-        self.n_aux_reward_funcs = regulatory_constraints['n_aux_reward_funcs']
+        self.n_aux_reward_funcs = self.regulatory_constraints['n_aux_reward_funcs']
         assert 0 <= self.n_aux_reward_funcs
         # initialise auxiliary reward functions randomly according to seed
         self.aux_reward_funcs = np.random.rand(
@@ -135,10 +134,9 @@ class AupAgent(PeUcrlAgt):
 
     def auxVI(self, r_estimate, p_estimate, epsilon=0.01, max_iter=int(1e6)): # max_iter=1000
         
-        """
-            This function implements a standard value iterationn algorithm, i.e. not an extended one.
-            The regulatory constraints should accept n_aux_reward_funcs as an argument.
-            It should also accept a regularization parameter.
+        """This function implements a standard value iterationn algorithm, i.e. not an extended one.
+        The regulatory constraints should accept n_aux_reward_funcs as an argument.
+        It should also accept a regularization parameter.
         """
 
         # initialise a Q-map, which is not necessary in PeUcrl

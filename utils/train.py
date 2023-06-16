@@ -52,7 +52,7 @@ def train(
 
         action = agt.sample_action(state)
         state, reward, terminated, truncated, info = env.step(action)
-        agt.update(state, reward, info['side_effects'])
+        agt.update(state, reward, info)
         save_data(path,env=env.get_data(),agt=agt.get_data(),**kwargs)
         if (t + 1) % 1000 == 0 or t == max_n_time_steps - 1:
             save_backup(path,env,agt)

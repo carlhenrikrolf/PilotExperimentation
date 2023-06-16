@@ -196,7 +196,7 @@ class Ucrl2Agt:
         return output
 
     # To update the learner after one step of the current policy.
-    def update(self, state, reward, side_effects):
+    def update(self, state, reward, info):
         self.current_state = self.prior_knowledge.tabularize(
             element=state,
             space=self.prior_knowledge.state_space,

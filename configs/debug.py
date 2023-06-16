@@ -5,8 +5,8 @@ config = {
     'env': env,
     'agt': Agt,
     'seed': None,
-    'regulatory_constraints': 'P>=0.5 [ X X n<=2 ]',
-    'max_n_time_steps': int(1e8),
+    'regulatory_constraints': {'prism_props': 'P>=0.5 [ X X n<=2 ]'},
+    'max_n_time_steps': int(1e3),
     'dir': 'debug/',
     'kwargs': {},
 }

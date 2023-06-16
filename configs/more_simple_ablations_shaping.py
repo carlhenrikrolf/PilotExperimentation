@@ -17,7 +17,7 @@ config = {
         None
     ] * 4 * repeats,
     'regulatory_constraints': [
-        'P>=1 [ G n<=2 ]',
+        {'prism_props': 'P>=1 [ G n<=2 ]'},
     ] * 4 * repeats,
     'max_n_time_steps': [
         400,

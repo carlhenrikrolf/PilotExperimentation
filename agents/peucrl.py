@@ -21,9 +21,7 @@ class PeUcrlAgt:
         prior_knowledge,
         regulatory_constraints,
     ):
-        """
-        Implementation of PeUcrl.
-        """
+        """Implementation of PeUcrl."""
 
         # Storing the parameters
         if seed is None:
@@ -33,6 +31,8 @@ class PeUcrlAgt:
         np.random.seed(self.seed)
         self.prior_knowledge = prior_knowledge
         self.regulatory_constraints = regulatory_constraints
+        self.prism_props = regulatory_constraints['prism_props']
+        assert type(self.prism_props) is str
 
         # Initialize counters
         self.t = 1
@@ -421,7 +421,7 @@ class PeUcrlAgt:
         return output
 
     # To update the learner after one step of the current policy.
-    def update(self, state, reward, side_effects):
+    def update(self, state, reward, info):
         self.current_cellular_state = self.prior_knowledge.cellularize(
             element=state,
             space=self.prior_knowledge.state_space,
@@ -431,7 +431,7 @@ class PeUcrlAgt:
             self.prior_knowledge.state_space,
         )
         self.current_reward = reward
-        self.side_effects_processing(side_effects)
+        self.side_effects_processing(info['side_effects'])
         self.action_pruning()
         self.updatev()
         self.updateP()
@@ -571,7 +571,7 @@ class PeUcrlAgt:
             except FileExistsError:
                 time.sleep(0.1)
         with open(self.prism_path + 'constraints.props', 'w') as props_file:
-            props_file.write(self.regulatory_constraints)
+            props_file.write(self.prism_props)
     
     def write_model_file(
             self,
