@@ -86,7 +86,7 @@ def save_data(
         data_file.write(',')
         data_file.write(str(agt['name']))
         data_file.write(',')
-        data_file.write(str(agt['regulatory_constraints']))
+        data_file.write(str(agt['regulatory_constraints']).replace(',',' &').replace(': ', '=')[1:-1])
         for key in kwargs:
             data_file.write(',')
             data_file.write(str(kwargs[key]))

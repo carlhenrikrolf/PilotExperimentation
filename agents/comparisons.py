@@ -20,10 +20,10 @@ class AlwaysSafeAgtPsoAgt(PeUcrlAgt):
         return 'AlwaysSafe/PSO'
     
     def __init__(self,seed,prior_knowledge,regulatory_constraints):
-        PeUcrlAgt().__init__(seed,prior_knowledge,{'prism_props': 'none'})
+        super().__init__(seed,prior_knowledge,{'prism_props': 'none'})
         self.prior_knowledge.identical_intracellular_transitions = False
         # check input
-        self.regulatory_constraints = regulatory_constraints
+        self.regulatory_constraints = regulatory_constraints # e.g. {'delicate_cell_classes': ['children']}
         delicate_cell_classes = self.regulatory_constraints['delicate_cell_classes']
         assert type(delicate_cell_classes) is list
         assert set(delicate_cell_classes).issubset(set(self.prior_knowledge.cell_classes))
@@ -67,15 +67,15 @@ class NationLikeAgt(PeUcrlAgt):
         return 'Nation-like'
     
     def __init__(self,seed,prior_knowledge,regulatory_constraints):
-        PeUcrlAgt().__init__(seed,prior_knowledge,{'prism_props': 'none'})
+        super().__init__(seed,prior_knowledge,{'prism_props': 'none'})
         self.prior_knowledge.identical_intracellular_transitions = False
-        self.regulatory_constraints = regulatory_constraints
+        self.regulatory_constraints = regulatory_constraints # e.g. {'conservativeness': 0.2, 'update_frequency': 50}
         self.conservativeness = self.regulatory_constraints['conservativeness']
         if type(self.conservativeness) is float:
-            self.update_frequency = [self.conservativeness] * self.prior_knowledge.n_cells
+            self.conservativeness = [self.conservativeness] * self.prior_knowledge.n_cells
         elif type(self.conservativeness) is not list:
             raise ValueError('update_frequency must be a float or a list of floats')
-        assert (0 <= self.conservativeness <= 1).all()
+        assert (np.array(self.conservativeness) <= 1).all() and (0 <= np.array(self.conservativeness)).all()
         self.update_frequency = self.regulatory_constraints['update_frequency']
         assert 0 <= self.update_frequency
 
@@ -102,7 +102,7 @@ class NationLikeAgt(PeUcrlAgt):
         self.policy = cp.copy(tmp_policy)
 
 
-class AupAgent(PeUcrlAgt):
+class AupAgt(PeUcrlAgt):
 
     """This aget uses the same regularizer as AUP although the RL aglorithm is based on cellular UCRL2."""
 
@@ -110,20 +110,18 @@ class AupAgent(PeUcrlAgt):
         return 'AUP'
 
     def __init__(self,seed,prior_knowledge,regulatory_constraints):
-        PeUcrlAgt().__init__(seed,prior_knowledge,{'prism_props': 'none'})
+        super().__init__(seed,prior_knowledge,{'prism_props': 'none'})
         self.prior_knowledge.identical_intracellular_transitions = False
-        self.regulatory_constraints = regulatory_constraints
+        self.regulatory_constraints = regulatory_constraints # e.g. {'regularization_param': 1., 'n_aux_reward_funcs': 10}
         self.regularization_param = self.regulatory_constraints['regularization_param']
         assert 0 <= self.regularization_param
         self.n_aux_reward_funcs = self.regulatory_constraints['n_aux_reward_funcs']
         assert 0 <= self.n_aux_reward_funcs
         # initialise auxiliary reward functions randomly according to seed
         self.aux_reward_funcs = np.random.rand(
-            shape=(
-                self.prior_knowledge.n_states,
-                self.prior_knowledge.n_actions,
-                self.n_aux_reward_funcs,
-            )
+            self.prior_knowledge.n_states,
+            self.prior_knowledge.n_actions,
+            self.n_aux_reward_funcs,
         )
 
     
@@ -163,7 +161,7 @@ class AupAgent(PeUcrlAgt):
                 for a in range(self.prior_knowledge.n_actions):
                     # simpler standard VI
                     temp[a] = r_estimate[s, a] + sum(
-                        [p_estimate[s,a,:] * u0[:]]
+                        [P * V for P, V in zip(p_estimate[s,a,:], u0[:])]
                     )
                     # let the pruning of actions still apply
                     temp[a] *= self.transition_indicator[s, a]
@@ -213,7 +211,7 @@ class AupAgent(PeUcrlAgt):
 #         return 'Capped divergence'
     
 #     def __init__(self, seed, prior_knowledge, regulatory_constraints):
-#         PeUcrlAgt().__init__(seed, prior_knowledge, regulatory_constraints)
+#         super().__init__(seed, prior_knowledge, regulatory_constraints)
 #         self.prior_knowledge.identical_intracellular_transitions = False
 #         self.cap = eval(regulatory_constraints)
 #         assert self.cap >= 0
