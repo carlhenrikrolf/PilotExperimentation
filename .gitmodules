@@ -6,6 +6,3 @@
 	path = gym-cellular
 	url = git@github.com:carlhenrikrolf/gym-cellular.git
 	branch = develop
-[submodule "agents/attainable-utility-preservation"]
-	path = agents/attainable-utility-preservation
-	url = https://github.com/aseembits93/attainable-utility-preservation.git

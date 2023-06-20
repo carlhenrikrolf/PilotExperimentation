@@ -1,4 +1,6 @@
-from .peucrl import PeUcrlAgt, cellular2tabular, tabular2cellular, allmax
+from .peucrl import PeUcrlAgt
+from agents.utils import *
+from gym_cellular.envs.utils import generalized_cellular2tabular as cellular2tabular, generalized_tabular2cellular as tabular2cellular
 
 import copy as cp
 import numpy as np
@@ -31,7 +33,7 @@ class AlwaysSafeAgtPsoAgt(PeUcrlAgt):
         self.delicate_cell_set = set()
         for cell in range(self.prior_knowledge.n_cells):
             for count, cell_class in enumerate(self.prior_knowledge.cell_classes):
-                if cell in self.prior_knowledge.cell_labelling[count]:
+                if count in self.prior_knowledge.cell_labelling[cell]:
                     if cell_class in delicate_cell_classes:
                         self.delicate_cell_set.add(cell)
 
@@ -41,9 +43,7 @@ class AlwaysSafeAgtPsoAgt(PeUcrlAgt):
         while len(cell_set) >= 1:
             cell = np.random.choice(list(cell_set)) # randomisation not relevant here
             cell_set -= {cell}
-            if cell in self.delicate_cell_set:
-                tmp_policy[cell, :] = cp.copy(behaviour_policy[cell, :])
-            else:
+            if cell not in self.delicate_cell_set:
                 tmp_policy[cell, :] = cp.copy(target_policy[cell, :])
                 self.policy_update[cell] = 1 # only relevant for debugging here
                 self.data['updated_cells'] = self.data['updated_cells'] + str(cell) + '|'
@@ -203,40 +203,4 @@ class AupAgt(PeUcrlAgt):
             scale += Q[tabular_state,noop]
         regularizer = self.regularization_param * penalty / scale
         return standard - regularizer
-
-
-# class CappedDivergenceAgt(PeUcrlAgt):
-    
-#     def name(self):
-#         return 'Capped divergence'
-    
-#     def __init__(self, seed, prior_knowledge, regulatory_constraints):
-#         super().__init__(seed, prior_knowledge, regulatory_constraints)
-#         self.prior_knowledge.identical_intracellular_transitions = False
-#         self.cap = eval(regulatory_constraints)
-#         assert self.cap >= 0
-#         self.last_policy = cp.copy(self.initial_policy)
-
-#     def off_policy(self):
-#         PeUcrlAgt().off_policy()
-#         self.last_policy = cp.copy(self.policy)
-
-#     def reward_shaping(self, tabular_state, tabular_action):
-#         standard = PeUcrlAgt().reward_shaping(tabular_state, tabular_action)
-#         def SED(tabular_state, tabular_action):
-#             output = 0
-#             for s in range(self.prior_knowledge.n_states):
-#                 if s == tabular_state:
-#                     continue
-#                 for cell in range(self.prior_knowledge.n_cells):
-#                     if self.last_policy[cell, s] != self.policy[cell, s]:
-#                         output += 1
-#                         break
-#             cellular_action = tabular2cellular(tabular_action, self.prior_knowledge.action_space)
-#             for cell in range(self.prior_knowledge.n_cells):
-#                 if self.last_policy[cell, tabular_state] != cellular_action[cell]:
-#                     output += 1
-#                     break
-#         penalty = max(0, SED(tabular_state, tabular_action) - self.cap)
-#         return standard - penalty
 
