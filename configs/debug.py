@@ -1,13 +1,13 @@
 from .envs import debug_env as env
-from agents import AlwaysSafeAgtPsoAgt as Agt
+from agents import PeUcrlAgt as Agt
 
 config = {
     'env': env,
     'agt': Agt,
     'seed': None,
-    'regulatory_constraints': {'delicate_cell_classes': ['children']},
-    'max_n_time_steps': int(1e3),
-    'dir': 'debug/',
+    'regulatory_constraints': {'prism_props': 'P>=0.5 [ X X n<=1 ]'},
+    'max_n_time_steps': int(1e4),
+    'dir': 'debug1/',
     'kwargs': {},
 }
 

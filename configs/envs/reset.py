@@ -1,4 +1,4 @@
-debug_env = {
+reset_env = {
     'args': [
         'gym_cellular/Cells3ResetVDeadlock-v0', # id
         None, # max_episode_steps
@@ -9,6 +9,6 @@ debug_env = {
     'kwargs': {
         'difficulty': 'easy',
         'reward_func_is_known': True,
-        'deadlock': True,
+        'deadlock': False,
     }
 }
