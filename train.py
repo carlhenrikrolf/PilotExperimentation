@@ -76,14 +76,18 @@ else: # multiple runs
         def parallel_train(path, env, agt, max_n_time_steps):
             try:
                 train(path, env, agt, max_n_time_steps)
-            except Exception as error:
-                with open(path + 'error.txt', 'w') as error_file:
+            except BaseException as error:
+                with open(path + 'error.txt', 'a') as error_file:
                     error_file.write(str(error))
-        def main():
-            with ProcessPoolExecutor(max_workers=config['max_workers']) as executor:
-                executor.map(parallel_train, path, env, agt, max_n_time_steps)
-        if __name__ == '__main__':
-            main()
+        try:
+            def main():
+                with ProcessPoolExecutor(max_workers=config['max_workers']) as executor:
+                    executor.map(parallel_train, path, env, agt, max_n_time_steps)
+            if __name__ == '__main__':
+                main()
+        except BaseException as error:
+            with open(config['super_dir'] + 'error.txt', 'a') as error_file:
+                error_file.write(str(error))
 
     else: # sequential
         for i in range(n):

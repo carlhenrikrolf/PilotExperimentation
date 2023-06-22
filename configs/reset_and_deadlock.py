@@ -39,9 +39,9 @@ config = {
     ] * n_repeats,
     'max_n_time_steps': [
         *[int(1e7)] * n_agts,
-        *[int(1e4)] * n_agts,
+        *[int(1e3)] * n_agts,
     ] * n_repeats,
-    'dir': [str(dir) for dir in range(n_agts * n_envs * n_repeats)],
+    'dir': [str(dir) + '/' for dir in range(n_agts * n_envs * n_repeats)],
     'super_dir': 'reset_and_deadlock/',
     'max_workers': 9,
 }
