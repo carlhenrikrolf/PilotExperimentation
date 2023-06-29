@@ -42,6 +42,6 @@ config = {
         *[int(1e3)] * n_agts,
     ] * n_repeats,
     'dir': [str(dir) + '/' for dir in range(n_agts * n_envs * n_repeats)],
-    'super_dir': 'reset_and_deadlock/',
+    'super_dir': 'reset_and_deadlock_2/',
     'max_workers': 9,
 }
