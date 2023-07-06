@@ -10,5 +10,6 @@ debug_env = {
         'difficulty': 'easy',
         'reward_func_is_known': True,
         'deadlock': True,
+        'env_seed': 0,
     }
 }
