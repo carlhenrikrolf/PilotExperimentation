@@ -72,7 +72,7 @@ To plot the results (suggested for longer training runs), from the directory `pi
 ```python3 eval.py <dir>```
 
 where ```<dir>``` a subdirectory in ```results```.
-(To reproduce the plots from _Safe Exploration in Reinforcement Learning through Pilot Experimentation_, use the commands ```python3 eval.py deadlock --style deadlock --title "deadlock variant"``` and ```python3 eval.py deadlock --style reset --title "reset variant"```  respectively.)
+(To reproduce the plots from _Safe Exploration in Reinforcement Learning through Pilot Experimentation_, use the commands ```python3 eval.py deadlock --style deadlock``` and ```python3 eval.py deadlock --style reset```  respectively.)
 
 <!-- ## Contributing
 

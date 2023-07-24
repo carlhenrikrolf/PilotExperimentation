@@ -5,4 +5,4 @@
 [submodule "gym-cellular"]
 	path = gym-cellular
 	url = https://github.com/carlhenrikrolf/gym-cellular.git
-	branch = main
+	branch = summer-project
