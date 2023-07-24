@@ -3,6 +3,8 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 
+sns.set_theme(style='dark')
+
 def plot_train_summary(path, n_bins=50, rmax=None):
     # load data
     first_rows = pd.read_csv(
