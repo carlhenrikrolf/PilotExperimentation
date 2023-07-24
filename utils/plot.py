@@ -1,6 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
+
+sns.set_theme(style='dark')
 
 def plot_train_summary(path, n_bins=50, rmax=None):
     # load data
@@ -80,3 +83,91 @@ def binning(raw_data, column, n_bins, kind='mean'):
     else:
         raise ValueError('kind must be either "mean" or "max"')
     return data
+
+
+def load_and_concatenate(path_set, zoom=-2, n_bins=50):
+    data_set = [pd.DataFrame() for _ in path_set]
+    raw_data_set = [pd.DataFrame() for _ in path_set]
+    for i, path in enumerate(path_set):
+        raw = pd.read_csv(
+            path + 'data.csv',
+            index_col='time step',
+            usecols=['time step', 'reward', 'side effects incidence', 'agent', 'regulatory constraints'],
+        )
+        data_set[i] = binning(raw[:zoom+1], 'reward', n_bins, kind='mean')
+        data_set[i]['side effects incidence'] = binning(raw[:zoom+1], 'side effects incidence', n_bins, kind='mean')['side effects incidence']
+        data_set[i]['agent s.t. regulatory constraints'] = raw['agent'][1] + '\n' + raw['regulatory constraints'][1]
+        raw_data_set[i] = raw[:31]
+        raw_data_set[i]['agent s.t. regulatory constraints'] = raw['agent'][1] + '\n' + raw['regulatory constraints'][1]
+    data = pd.concat(data_set)
+    raw_data = pd.concat(raw_data_set)
+    return data, raw_data
+
+
+def reset_plot(data, raw_data):
+    fig, [[reward, text], [side_effects, zoom_in]] = plt.subplots(
+        2,
+        2,
+        sharex='col',
+        sharey='row',
+        figsize=(12, 8),
+        gridspec_kw={'width_ratios': [3, 2]}
+    )
+    sns.lineplot(
+        data=data,
+        x='time step',
+        y='reward',
+        ax = reward,
+        hue='agent s.t. regulatory constraints',
+        style='agent s.t. regulatory constraints',
+        legend=True,
+    ).legend(loc='center left', fontsize=10, bbox_to_anchor=(1.1, 0.5))
+    text.axis('off')
+    sns.lineplot(
+        data=data,
+        x='time step',
+        y='side effects incidence',
+        ax = side_effects,
+        hue='agent s.t. regulatory constraints',
+        style='agent s.t. regulatory constraints',
+        legend=False,
+    )
+    sns.lineplot(
+        data=raw_data,
+        x='time step',
+        y='side effects incidence',
+        ax = zoom_in,
+        hue='agent s.t. regulatory constraints',
+        style='agent s.t. regulatory constraints',
+        legend=False,
+    )
+    return fig
+
+def deadlock_plot(data, raw_data):
+    fig, [reward, side_effects] = plt.subplots(
+        2,
+        1,
+        sharex='col',
+        sharey='row',
+        figsize=(6, 8),
+        #gridspec_kw={'width_ratios': [3, 2]}
+    )
+    sns.lineplot(
+        data=data,
+        x='time step',
+        y='reward',
+        ax = reward,
+        hue='agent s.t. regulatory constraints',
+        style='agent s.t. regulatory constraints',
+        legend=False,
+    )   
+    sns.lineplot(
+        data=data,
+        x='time step',
+        y='side effects incidence',
+        ax = side_effects,
+        hue='agent s.t. regulatory constraints',
+        style='agent s.t. regulatory constraints',
+        legend=False,
+    )
+    return fig

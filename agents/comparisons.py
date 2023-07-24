@@ -64,7 +64,7 @@ class NationLikeAgt(PeUcrlAgt):
     """
 
     def name(self):
-        return 'Nation-like'
+        return 'nation-like'
     
     def __init__(self,seed,prior_knowledge,regulatory_constraints):
         super().__init__(seed,prior_knowledge,{'prism_props': 'none'})

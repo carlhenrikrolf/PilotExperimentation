@@ -57,6 +57,9 @@ def train(
         if (t + 1) % 1000 == 0 or t == max_n_time_steps - 1:
             save_backup(path,env,agt)
 
+    with open(path + 'completed.txt', 'a') as completed_file:
+        completed_file.write('completed after this number of time steps: ' + str(t + 1) + '\n')
+
 
 
 
