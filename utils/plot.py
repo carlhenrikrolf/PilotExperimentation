@@ -96,15 +96,71 @@ def load_and_concatenate(path_set, zoom=-2, n_bins=50):
         )
         data_set[i] = binning(raw[:zoom+1], 'reward', n_bins, kind='mean')
         data_set[i]['side effects incidence'] = binning(raw[:zoom+1], 'side effects incidence', n_bins, kind='mean')['side effects incidence']
+        data_set[i]['algorithm'] = raw['agent'][1]
         data_set[i]['agent s.t. regulatory constraints'] = raw['agent'][1] + '\n' + raw['regulatory constraints'][1]
         raw_data_set[i] = raw[:31]
+        raw_data_set[i]['algorithm'] = raw['agent'][1]
         raw_data_set[i]['agent s.t. regulatory constraints'] = raw['agent'][1] + '\n' + raw['regulatory constraints'][1]
     data = pd.concat(data_set)
     raw_data = pd.concat(raw_data_set)
     return data, raw_data
 
+def paper_plot(data, raw_data, n_bins=50):
+    data = data.replace('unsafe baseline', 'Cellular Ucrl')
+    data = data.replace('Nation-like', 'Nation-Like')
+    raw_data = raw_data.replace('unsafe baseline', 'Cellular Ucrl')
+    raw_data = raw_data.replace('Nation-like', 'Nation-Like')
+    fig, [[reward, text], [side_effects, zoom_in]] = plt.subplots(
+        2,
+        2,
+        sharex='col',
+        sharey='row',
+        figsize=(12, 8),
+        gridspec_kw={'width_ratios': [3, 2]}
+    )
+    sns.lineplot(
+        data=data,
+        x='time step',
+        y='reward',
+        ax = reward,
+        hue='algorithm',
+        style='algorithm',
+        legend=True,
+    ).legend(
+        loc='center left',
+        fontsize=20,
+        bbox_to_anchor=(1.12, 0.5),
+        frameon=False,
+    )
+    reward.tick_params(axis='both', which='major', labelsize=15)
+    reward.set_ylabel('reward', fontsize=20)
+    text.axis('off')
+    sns.lineplot(
+        data=data,
+        x='time step',
+        y='side effects incidence',
+        ax = side_effects,
+        hue='algorithm',
+        style='algorithm',
+        legend=False,
+    )
+    side_effects.tick_params(axis='both', which='major', labelsize=15)
+    side_effects.set_xlabel('time step (' + str(n_bins) + ' bins)', fontsize=20)
+    side_effects.set_ylabel('side-effects incidence', fontsize=20)
+    sns.lineplot(
+        data=raw_data,
+        x='time step',
+        y='side effects incidence',
+        ax = zoom_in,
+        hue='algorithm',
+        style='algorithm',
+        legend=False,
+    )
+    zoom_in.tick_params(axis='both', which='major', labelsize=15)
+    zoom_in.set_xlabel('time step (zoomed in)', fontsize=20)
+    return fig
 
-def reset_plot(data, raw_data):
+def reset_plot(data, raw_data, n_bins=50):
     fig, [[reward, text], [side_effects, zoom_in]] = plt.subplots(
         2,
         2,
@@ -143,7 +199,7 @@ def reset_plot(data, raw_data):
     )
     return fig
 
-def deadlock_plot(data, raw_data):
+def deadlock_plot(data, raw_data, n_bins=50):
     fig, [reward, side_effects] = plt.subplots(
         2,
         1,
@@ -160,7 +216,7 @@ def deadlock_plot(data, raw_data):
         hue='agent s.t. regulatory constraints',
         style='agent s.t. regulatory constraints',
         legend=False,
-    )   
+    )
     sns.lineplot(
         data=data,
         x='time step',

@@ -72,11 +72,15 @@ To plot the results (suggested for longer training runs), from the directory `pi
 ```python3 eval.py <dir>```
 
 where ```<dir>``` a subdirectory in ```results```.
-(To reproduce the plots from _Safe Exploration in Reinforcement Learning through Pilot Experimentation_, use the commands ```python3 eval.py deadlock --style deadlock --title "deadlock variant"``` and ```python3 eval.py deadlock --style reset --title "reset variant"```  respectively.)
+(To reproduce the plots from _Safe Exploration in Reinforcement Learning through Pilot Experimentation_, use the commands ```python3 eval.py deadlock --style paper --title "deadlock variant"``` and ```python3 eval.py deadlock --style paper --title "reset variant"```  respectively.)
 
 <!-- ## Contributing
 
 Licence -->
+
+## Trouble-Shooting
+
+Error regarding `Process().cpu_num()`. This may occur on some machines, e.g. Mac OS. Edit `agents/peucrl.py`. Replace `cpu_id = Process().cpu_num()` with `cpu_id = 1`. This will not change performance of the algorithm as `cpu_id` is only there for debugging purposes.
 
 ## Footnotes
 

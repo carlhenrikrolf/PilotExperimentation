@@ -1,4 +1,4 @@
-from utils.plot import plot_train_summary, binning, load_and_concatenate, reset_plot, deadlock_plot
+from utils.plot import plot_train_summary, binning, load_and_concatenate, paper_plot, reset_plot, deadlock_plot
 
 import argparse
 import matplotlib.pyplot as plt
@@ -30,10 +30,10 @@ parser.add_argument(
 )
 parser.add_argument(
     '--style',
-    default='reset',
+    default='paper',
     dest='style',
     metavar='<style>',
-    help='This is only used for comparing multiple training runs. By default, style=reset, which means that the plot generated is in the style of the figure for the results from the reset environment. If style=deadlock, it will be in the style of the figure for the results from the deadlock environment instead.'
+    help='This is only used for comparing multiple training runs. By default, style=peper. In addition, style=reset which means that the plot generated is in the style of the figure for the results from the reset environment. If style=deadlock, it will be in the style of the figure for the results from the deadlock environment instead.'
 )
 parser.add_argument(
     '--zoom',
@@ -95,7 +95,15 @@ else:
     zoom = args.zoom
 
     # style
-    if style == 'reset':
+    if style == 'paper':
+        if zoom is None:
+            zoom = -2
+        if args.title is None:
+            title = ''
+        else:
+            title = args.title
+        plot = paper_plot
+    elif style == 'reset':
         if zoom is None:
             zoom = -2
         if args.title is None:
@@ -112,12 +120,12 @@ else:
             title = args.title
         plot = deadlock_plot
     else:
-        raise ValueError('style must be either reset or deadlock')
+        raise ValueError('style must be either paper, reset, or deadlock')
     
     # load data
     data, raw_data = load_and_concatenate(path_set, zoom=zoom, n_bins=n_bins)
 
     # plot data
-    fig = plot(data, raw_data)
-    fig.suptitle(title)
+    fig = plot(data, raw_data, n_bins=n_bins)
+    fig.suptitle(title, fontsize=25)
     fig.savefig('results/' + args.path + '/plot.png')
